@@ -442,6 +442,7 @@ set(LLVM_ALL_TARGETS
   RISCV
   Sparc
   SystemZ
+  UG24
   VE
   WebAssembly
   X86

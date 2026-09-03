@@ -320,6 +320,10 @@ enum {
   EM_VE = 251,            // NEC SX-Aurora VE
   EM_CSKY = 252,          // C-SKY 32-bit processor
   EM_LOONGARCH = 258,     // LoongArch
+
+  // Unofficial, vendor-allocated machine number for the uG24 8-bit
+  // microprocessor.  Not registered with the generic ELF ABI.
+  EM_UG24 = 0x9240,
 };
 
 // Object file classes.
@@ -887,6 +891,11 @@ enum {
 // ELF Relocation type for VE.
 enum {
 #include "ELFRelocs/VE.def"
+};
+
+// ELF Relocation types for uG24
+enum {
+#include "ELFRelocs/UG24.def"
 };
 
 // CSKY Specific e_flags

@@ -181,6 +181,7 @@ TargetInfo *getAVRTargetInfo();
 TargetInfo *getHexagonTargetInfo();
 TargetInfo *getLoongArchTargetInfo();
 TargetInfo *getMSP430TargetInfo();
+TargetInfo *getUG24TargetInfo();
 TargetInfo *getPPC64TargetInfo();
 TargetInfo *getPPCTargetInfo();
 TargetInfo *getRISCVTargetInfo();

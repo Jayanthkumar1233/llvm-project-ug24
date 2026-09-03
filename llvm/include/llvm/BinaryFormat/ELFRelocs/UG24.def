@@ -1,0 +1,16 @@
+#ifndef ELF_RELOC
+#error "ELF_RELOC must be defined"
+#endif
+
+ELF_RELOC(R_UG24_NONE,      0)
+// Plain data relocations.
+ELF_RELOC(R_UG24_8,         1)
+ELF_RELOC(R_UG24_16,        2)
+ELF_RELOC(R_UG24_32,        3)
+// 16-bit absolute address in the second halfword of a JA/LJA.
+ELF_RELOC(R_UG24_ABS16,     4)
+// Signed 10-bit instruction-word displacement in Inst{15-6} of a branch.
+ELF_RELOC(R_UG24_PCREL10,   5)
+// Low / high byte of a 16-bit address in the imm8 field of an MVI.
+ELF_RELOC(R_UG24_LO8,       6)
+ELF_RELOC(R_UG24_HI8,       7)

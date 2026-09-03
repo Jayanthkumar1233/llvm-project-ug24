@@ -281,6 +281,7 @@ void ScalarEnumerationTraits<ELFYAML::ELF_EM>::enumeration(
   ECase(EM_CR);
   ECase(EM_F2MC16);
   ECase(EM_MSP430);
+  ECase(EM_UG24);
   ECase(EM_BLACKFIN);
   ECase(EM_SE_C33);
   ECase(EM_SEP);
