@@ -27,7 +27,13 @@ static std::string computeDataLayout(const Triple &TT) {
   // Little endian, ELF mangling, 16-bit byte-addressed pointers, no minimum
   // aggregate alignment, 8- and 16-bit native integer widths, 8-bit stack
   // alignment (the uG24 stack is byte granular).
-  return "e-m:e-p:16:16-i8:8-i16:8-a:8-n8:16-S8";
+  //
+  // i32, i64, f32 and f64 have to be spelled out even though nothing here is
+  // native at those widths.  Left unstated, LLVM assumes its own 4- and 8-byte
+  // ABI alignments while Clang says one byte, and the two disagree wherever
+  // alignment is observable -- most visibly in va_arg, which then rounds the
+  // argument pointer up and reads a 32-bit variadic argument two bytes late.
+  return "e-m:e-p:16:8-i8:8-i16:8-i32:8-i64:8-f32:8-f64:8-a:8-n8:16-S8";
 }
 
 UG24TargetMachine::UG24TargetMachine(
@@ -59,6 +65,11 @@ public:
   void addPreEmitPass() override {
     // Split the 16-bit and frame pseudos once real registers are assigned.
     addPass(createUG24ExpandPseudoPass());
+    // Conditional branches reach only +/- 512 instruction words.  Relaxation
+    // has to run after the pseudos are gone, because that is the first point
+    // at which every instruction has its final size.  Anything out of reach
+    // becomes an inverted short branch over an absolute JA.
+    addPass(&BranchRelaxationPassID);
   }
 };
 } // namespace

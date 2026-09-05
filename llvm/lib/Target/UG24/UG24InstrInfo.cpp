@@ -43,6 +43,24 @@ unsigned UG24CC::getBranchOpcode(UG24CC::CondCode CC) {
   llvm_unreachable("invalid uG24 condition code");
 }
 
+UG24CC::CondCode UG24CC::getCondFromBranchOpcode(unsigned Opcode) {
+  switch (Opcode) {
+  case UG24::BEQ: return UG24CC::COND_EQ;
+  case UG24::BNE: return UG24CC::COND_NE;
+  case UG24::BLT: return UG24CC::COND_LT;
+  case UG24::BLE: return UG24CC::COND_LE;
+  case UG24::BGT: return UG24CC::COND_GT;
+  case UG24::BGE: return UG24CC::COND_GE;
+  case UG24::BZ:  return UG24CC::COND_Z;
+  case UG24::BNZ: return UG24CC::COND_NZ;
+  case UG24::BC:  return UG24CC::COND_C;
+  case UG24::BNC: return UG24CC::COND_NC;
+  case UG24::BPS: return UG24CC::COND_PS;
+  case UG24::BNS: return UG24CC::COND_NS;
+  default: return UG24CC::COND_INVALID;
+  }
+}
+
 UG24CC::CondCode UG24CC::getOppositeCondition(UG24CC::CondCode CC) {
   switch (CC) {
   case UG24CC::COND_EQ: return UG24CC::COND_NE;
@@ -244,6 +262,20 @@ bool UG24InstrInfo::analyzeBranch(MachineBasicBlock &MBB,
       continue;
     }
 
+    // After UG24ExpandPseudo the BRCC pseudo is gone and the real conditional
+    // branch is what is left.  Branch relaxation runs at that point, so this
+    // form has to be understood too.
+    if (UG24CC::CondCode CC =
+            UG24CC::getCondFromBranchOpcode(I->getOpcode());
+        CC != UG24CC::COND_INVALID) {
+      if (!Cond.empty())
+        return true; // More than one conditional branch: give up.
+      FBB = TBB;
+      TBB = I->getOperand(0).getMBB();
+      Cond.push_back(MachineOperand::CreateImm(CC));
+      continue;
+    }
+
     return true; // Some terminator we do not understand.
   }
 
@@ -252,7 +284,8 @@ bool UG24InstrInfo::analyzeBranch(MachineBasicBlock &MBB,
 
 unsigned UG24InstrInfo::removeBranch(MachineBasicBlock &MBB,
                                      int *BytesRemoved) const {
-  assert(!BytesRemoved && "code size not tracked");
+  if (BytesRemoved)
+    *BytesRemoved = 0;
 
   MachineBasicBlock::iterator I = MBB.end();
   unsigned Count = 0;
@@ -260,8 +293,12 @@ unsigned UG24InstrInfo::removeBranch(MachineBasicBlock &MBB,
     --I;
     if (I->isDebugInstr())
       continue;
-    if (I->getOpcode() != UG24::JR && I->getOpcode() != UG24::BRCC)
+    if (I->getOpcode() != UG24::JR && I->getOpcode() != UG24::BRCC &&
+        I->getOpcode() != UG24::JA &&
+        UG24CC::getCondFromBranchOpcode(I->getOpcode()) == UG24CC::COND_INVALID)
       break;
+    if (BytesRemoved)
+      *BytesRemoved += getInstSizeInBytes(*I);
     I->eraseFromParent();
     I = MBB.end();
     ++Count;
@@ -275,23 +312,76 @@ unsigned UG24InstrInfo::insertBranch(MachineBasicBlock &MBB,
                                      ArrayRef<MachineOperand> Cond,
                                      const DebugLoc &DL,
                                      int *BytesAdded) const {
-  assert(!BytesAdded && "code size not tracked");
   assert(TBB && "insertBranch must not be told to insert a fallthrough");
   assert((Cond.size() == 1 || Cond.empty()) &&
          "uG24 branch conditions have exactly one component");
+  if (BytesAdded)
+    *BytesAdded = 0;
 
+  // The real conditional branch is emitted rather than the BRCC pseudo, so
+  // that this works both before and after UG24ExpandPseudo has run.  Branch
+  // relaxation calls it after.
   if (Cond.empty()) {
     assert(!FBB && "unconditional branch cannot have two targets");
     BuildMI(&MBB, DL, get(UG24::JR)).addMBB(TBB);
+    if (BytesAdded)
+      *BytesAdded += 2;
     return 1;
   }
 
-  BuildMI(&MBB, DL, get(UG24::BRCC)).addMBB(TBB).addImm(Cond[0].getImm());
+  auto CC = static_cast<UG24CC::CondCode>(Cond[0].getImm());
+  BuildMI(&MBB, DL, get(UG24CC::getBranchOpcode(CC))).addMBB(TBB);
+  if (BytesAdded)
+    *BytesAdded += 2;
   if (!FBB)
     return 1;
 
   BuildMI(&MBB, DL, get(UG24::JR)).addMBB(FBB);
+  if (BytesAdded)
+    *BytesAdded += 2;
   return 2;
+}
+
+//===----------------------------------------------------------------------===//
+// Branch relaxation
+//===----------------------------------------------------------------------===//
+
+unsigned UG24InstrInfo::getInstSizeInBytes(const MachineInstr &MI) const {
+  if (MI.isMetaInstruction())
+    return 0;
+  // Every uG24 encoding is two bytes except the absolute jumps, which are
+  // four; the size comes straight from the instruction description.
+  return MI.getDesc().getSize();
+}
+
+MachineBasicBlock *
+UG24InstrInfo::getBranchDestBlock(const MachineInstr &MI) const {
+  // Every branch on this target names its destination in operand 0.
+  assert(MI.getOperand(0).isMBB() && "branch destination is not a block");
+  return MI.getOperand(0).getMBB();
+}
+
+bool UG24InstrInfo::isBranchOffsetInRange(unsigned BranchOpc,
+                                          int64_t BrOffset) const {
+  // JA carries a full 16-bit address, so it reaches anywhere in the map.
+  if (BranchOpc == UG24::JA || BranchOpc == UG24::LJA)
+    return true;
+
+  // Everything else is PC-relative: a signed 10-bit count of instruction words
+  // applied to the address of the instruction *after* the branch.  BrOffset is
+  // in bytes and measured from the branch itself, hence the -2.
+  return isInt<10>((BrOffset - 2) / 2);
+}
+
+void UG24InstrInfo::insertIndirectBranch(MachineBasicBlock &MBB,
+                                         MachineBasicBlock &NewDestBB,
+                                         MachineBasicBlock &RestoreBB,
+                                         const DebugLoc &DL, int64_t BrOffset,
+                                         RegScavenger *RS) const {
+  // A jump that PC-relative form cannot reach becomes an absolute one.  JA
+  // needs no register, so there is nothing to scavenge and RestoreBB stays
+  // empty.
+  BuildMI(&MBB, DL, get(UG24::JA)).addMBB(&NewDestBB);
 }
 
 bool UG24InstrInfo::reverseBranchCondition(

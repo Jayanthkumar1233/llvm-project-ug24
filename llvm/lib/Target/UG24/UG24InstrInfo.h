@@ -58,6 +58,18 @@ public:
 
   bool reverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const override;
 
+  unsigned getInstSizeInBytes(const MachineInstr &MI) const override;
+
+  MachineBasicBlock *getBranchDestBlock(const MachineInstr &MI) const override;
+
+  bool isBranchOffsetInRange(unsigned BranchOpc,
+                             int64_t BrOffset) const override;
+
+  void insertIndirectBranch(MachineBasicBlock &MBB,
+                            MachineBasicBlock &NewDestBB,
+                            MachineBasicBlock &RestoreBB, const DebugLoc &DL,
+                            int64_t BrOffset, RegScavenger *RS) const override;
+
   /// Add \p Amount to \p Reg, clobbering PSW.  Used by frame setup to move SP
   /// and to form frame addresses.
   void addImmediate(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,

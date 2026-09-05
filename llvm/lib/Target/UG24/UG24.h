@@ -39,6 +39,10 @@ enum CondCode {
 /// Map a condition code onto the opcode of the branch that tests it.
 unsigned getBranchOpcode(CondCode CC);
 
+/// The condition a conditional branch opcode tests, or COND_INVALID if the
+/// opcode is not a conditional branch.  The inverse of getBranchOpcode.
+CondCode getCondFromBranchOpcode(unsigned Opcode);
+
 /// The condition that is true exactly when \p CC is false.
 CondCode getOppositeCondition(CondCode CC);
 

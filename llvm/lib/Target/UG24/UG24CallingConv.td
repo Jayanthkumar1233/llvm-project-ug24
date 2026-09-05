@@ -15,6 +15,15 @@ def CC_UG24 : CallingConv<[
   // Promote anything narrower than a byte to i8.
   CCIfType<[i1], CCPromoteToType<i8>>,
 
+  // In a variadic call every argument travels on the stack, fixed ones
+  // included.  The callee analyses only its declared parameters, so this is
+  // the one arrangement in which both sides agree on where the variadic block
+  // begins: immediately after the fixed arguments, in one contiguous run that
+  // va_arg can walk.  Passing the first variadic argument in a register would
+  // leave the callee reading from the second one onwards.
+  CCIfVarArg<CCIfType<[i8],  CCAssignToStack<1, 1>>>,
+  CCIfVarArg<CCIfType<[i16], CCAssignToStack<2, 1>>>,
+
   // 8-bit arguments go in R0-R3.
   CCIfType<[i8], CCAssignToReg<[R0, R1, R2, R3]>>,
 

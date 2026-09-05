@@ -13,6 +13,7 @@
 #include "UG24ISelLowering.h"
 #include "UG24InstrInfo.h"
 #include "UG24RegisterInfo.h"
+#include "UG24SelectionDAGInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/Target/TargetMachine.h"
@@ -23,10 +24,15 @@
 namespace llvm {
 
 class UG24Subtarget : public UG24GenSubtargetInfo {
+  // Declaration order is construction order.  RegInfo has to come before
+  // TLInfo, because UG24TargetLowering's constructor calls
+  // computeRegisterProperties(Subtarget.getRegisterInfo()) -- reading a member
+  // that has not been constructed yet is undefined behaviour.
   UG24InstrInfo InstrInfo;
   UG24FrameLowering FrameLowering;
-  UG24TargetLowering TLInfo;
   UG24RegisterInfo RegInfo;
+  UG24TargetLowering TLInfo;
+  UG24SelectionDAGInfo TSInfo;
 
 public:
   UG24Subtarget(const Triple &TT, const std::string &CPU,
@@ -41,6 +47,12 @@ public:
   }
   const UG24RegisterInfo *getRegisterInfo() const override {
     return &RegInfo;
+  }
+  // Without this the default returns nullptr, and SelectionDAGBuilder
+  // dereferences it the first time a call to strlen, memcmp or friends is
+  // recognised as a library function.
+  const UG24SelectionDAGInfo *getSelectionDAGInfo() const override {
+    return &TSInfo;
   }
 
   void ParseSubtargetFeatures(StringRef CPU, StringRef TuneCPU, StringRef FS);

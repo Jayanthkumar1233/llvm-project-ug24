@@ -48,8 +48,12 @@ UG24TargetLowering::UG24TargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::SELECT_CC, VT, Custom);
     setOperationAction(ISD::SETCC, VT, Custom);
     setOperationAction(ISD::SELECT, VT, Expand);
-    setOperationAction(ISD::BRCOND, VT, Expand);
   }
+  // BRCOND is chain-typed, so it has to be legalised on MVT::Other -- asking
+  // for it on i8/i16 sets nothing and leaves a branch on a plain boolean (a
+  // bitfield test, say) with no pattern to match.  Expanding it rewrites the
+  // branch as BR_CC against zero, which LowerBR_CC already handles.
+  setOperationAction(ISD::BRCOND, MVT::Other, Expand);
   setOperationAction(ISD::BRIND, MVT::Other, Expand);
   setOperationAction(ISD::BR_JT, MVT::Other, Expand);
 
@@ -205,6 +209,7 @@ const char *UG24TargetLowering::getTargetNodeName(unsigned Opcode) const {
   case UG24ISD::SELECT_CC:    return "UG24ISD::SELECT_CC";
   case UG24ISD::SETCC16:      return "UG24ISD::SETCC16";
   case UG24ISD::BR_CC16:      return "UG24ISD::BR_CC16";
+  case UG24ISD::MULW:         return "UG24ISD::MULW";
   case UG24ISD::WRAPPER:      return "UG24ISD::WRAPPER";
   case UG24ISD::LO8:          return "UG24ISD::LO8";
   case UG24ISD::HI8:          return "UG24ISD::HI8";
@@ -429,6 +434,24 @@ static bool isZExtByte(SDValue V) {
          V.getOperand(0).getValueType() == MVT::i8;
 }
 
+/// The i8 value inside \p V when V is a 16-bit value that provably holds only
+/// a byte, or an empty SDValue.  Two spellings reach here: an explicit
+/// zero-extend, and `and x, 255`, which is what zext(trunc(x)) folds to -- the
+/// shape a byte argument now arrives in, since the calling convention widens
+/// bytes to 16 bits.  Missing the second spelling would send every
+/// uint8_t * uint8_t to __mulhi3 instead of the hardware multiplier.
+static SDValue getByteValue(SDValue V, const SDLoc &DL, SelectionDAG &DAG) {
+  if (isZExtByte(V))
+    return V.getOperand(0);
+
+  if (V.getOpcode() == ISD::AND)
+    if (auto *C = dyn_cast<ConstantSDNode>(V.getOperand(1)))
+      if (C->getZExtValue() == 0xff)
+        return DAG.getNode(ISD::TRUNCATE, DL, MVT::i8, V.getOperand(0));
+
+  return SDValue();
+}
+
 // The hardware multiplies two bytes into a 16-bit product.  When both
 // operands are zero-extended bytes that is exactly what is wanted, and the
 // MULW pattern selects the instruction; a genuinely 16-bit multiply has no
@@ -438,21 +461,31 @@ SDValue UG24TargetLowering::LowerMUL(SDValue Op, SelectionDAG &DAG) const {
   SDValue LHS = Op.getOperand(0);
   SDValue RHS = Op.getOperand(1);
 
-  // A constant that fits in a byte can be widened into the same shape.
-  auto asZExtByte = [&](SDValue V) -> SDValue {
+  // The byte behind a widened 16-bit operand, in any of the shapes that can
+  // reach here: an explicit zext from i8, a mask with 0xff -- which is what
+  // zext-of-trunc folds to, because truncation is free on this target -- or a
+  // constant that fits in a byte.
+  auto byteOperand = [&](SDValue V) -> SDValue {
     if (isZExtByte(V))
-      return V;
+      return V.getOperand(0);
+    if (V.getOpcode() == ISD::AND)
+      if (auto *C = dyn_cast<ConstantSDNode>(V.getOperand(1)))
+        if (C->getZExtValue() == 0xff)
+          return DAG.getNode(ISD::TRUNCATE, DL, MVT::i8, V.getOperand(0));
     if (auto *C = dyn_cast<ConstantSDNode>(V))
       if (isUInt<8>(C->getZExtValue()))
-        return DAG.getNode(ISD::ZERO_EXTEND, DL, MVT::i16,
-                           DAG.getConstant(C->getZExtValue(), DL, MVT::i8));
+        return DAG.getConstant(C->getZExtValue(), DL, MVT::i8);
     return SDValue();
   };
 
-  SDValue L = asZExtByte(LHS);
-  SDValue R = asZExtByte(RHS);
+  // The widening multiply becomes a target node rather than another i16 MUL.
+  // Returning a plain MUL here put legalisation and the DAG combiner in a
+  // loop: the combiner flips the mask form to zext-of-trunc and back, and
+  // every flip produced a fresh Custom MUL for LowerMUL to lower once more.
+  SDValue L = byteOperand(LHS);
+  SDValue R = byteOperand(RHS);
   if (L && R)
-    return DAG.getNode(ISD::MUL, DL, MVT::i16, L, R);
+    return DAG.getNode(UG24ISD::MULW, DL, MVT::i16, L, R);
 
   SDValue Ops[] = {LHS, RHS};
   MakeLibCallOptions CallOptions;
@@ -618,6 +651,11 @@ SDValue UG24TargetLowering::LowerFormalArguments(
                             DAG.getValueType(VA.getValVT()));
         Value = DAG.getNode(ISD::TRUNCATE, DL, VA.getValVT(), Value);
         break;
+      case CCValAssign::AExt:
+        // Byte arguments are promoted to 16 bits; the upper half carries
+        // nothing, so just narrow it back.
+        Value = DAG.getNode(ISD::TRUNCATE, DL, VA.getValVT(), Value);
+        break;
       default:
         report_fatal_error("unhandled argument location on uG24");
       }
@@ -626,15 +664,18 @@ SDValue UG24TargetLowering::LowerFormalArguments(
       continue;
     }
 
-    // Stack argument.
+    // Stack argument.  A promoted byte occupies a full 16-bit slot, so the
+    // load has to be of the promoted width and then narrowed.
     assert(VA.isMemLoc() && "argument is neither in a register nor in memory");
-    EVT ValVT = VA.getValVT();
-    int FI = MFI.CreateFixedObject(ValVT.getStoreSize(), VA.getLocMemOffset(),
+    EVT LocVT = VA.getLocVT();
+    int FI = MFI.CreateFixedObject(LocVT.getStoreSize(), VA.getLocMemOffset(),
                                    /*IsImmutable=*/true);
     SDValue FIN = DAG.getFrameIndex(FI, MVT::i16);
-    InVals.push_back(DAG.getLoad(
-        ValVT, DL, Chain, FIN,
-        MachinePointerInfo::getFixedStack(MF, FI)));
+    SDValue Loaded = DAG.getLoad(LocVT, DL, Chain, FIN,
+                                 MachinePointerInfo::getFixedStack(MF, FI));
+    if (LocVT != VA.getValVT())
+      Loaded = DAG.getNode(ISD::TRUNCATE, DL, VA.getValVT(), Loaded);
+    InVals.push_back(Loaded);
   }
 
   if (IsVarArg) {
@@ -959,6 +1000,31 @@ static MachineBasicBlock *emitSetCC16(MachineInstr &MI, MachineBasicBlock *BB,
 //
 // Equality is special: it can only hold when the high bytes match, so the
 // "high bytes differ" edge goes straight to one side or the other.
+// Splitting a block behind LLVM's back leaves the PHI nodes in the successors
+// still naming the original block.  When control can now arrive from either
+// the original or the new block, every PHI entry naming the original needs a
+// twin naming the new one; when the original no longer reaches the successor
+// at all, the entry has to be renamed instead.  Getting this wrong produces a
+// PHI whose incoming blocks disagree with the CFG, and PHI elimination then
+// quietly replaces the missing value with IMPLICIT_DEF -- a function that
+// returns garbage with no diagnostic anywhere.
+static void addPhiEntryLike(MachineBasicBlock *Succ, MachineBasicBlock *From,
+                            MachineBasicBlock *Also) {
+  for (MachineInstr &Phi : Succ->phis()) {
+    for (unsigned I = 1, E = Phi.getNumOperands(); I + 1 < E; I += 2) {
+      if (Phi.getOperand(I + 1).getMBB() != From)
+        continue;
+      MachineOperand Value = Phi.getOperand(I);
+      Phi.addOperand(MachineOperand::CreateReg(
+          Value.getReg(), /*isDef=*/false, /*isImp=*/false, /*isKill=*/false,
+          /*isDead=*/false, /*isUndef=*/false, /*isEarlyClobber=*/false,
+          Value.getSubReg()));
+      Phi.addOperand(MachineOperand::CreateMBB(Also));
+      break;
+    }
+  }
+}
+
 static MachineBasicBlock *emitBrCC16(MachineInstr &MI, MachineBasicBlock *BB,
                                      const UG24InstrInfo &TII) {
   MachineFunction *MF = BB->getParent();
@@ -1031,6 +1097,19 @@ static MachineBasicBlock *emitBrCC16(MachineInstr &MI, MachineBasicBlock *BB,
   BuildMI(LowBB, DL, TII.get(UG24::JR)).addMBB(Fallthrough);
   LowBB->addSuccessor(Dest);
   LowBB->addSuccessor(Fallthrough);
+
+  // Both successors are now reachable through LowBB, so their PHIs have to be
+  // told about it.  Where BB has stopped being a predecessor the entry moves
+  // rather than multiplies.
+  if (BB->isSuccessor(Dest))
+    addPhiEntryLike(Dest, BB, LowBB);
+  else
+    Dest->replacePhiUsesWith(BB, LowBB);
+
+  if (BB->isSuccessor(Fallthrough))
+    addPhiEntryLike(Fallthrough, BB, LowBB);
+  else
+    Fallthrough->replacePhiUsesWith(BB, LowBB);
 
   return BB;
 }

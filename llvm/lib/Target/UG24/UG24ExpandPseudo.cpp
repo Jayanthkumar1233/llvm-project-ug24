@@ -202,6 +202,46 @@ bool UG24ExpandPseudo::expandMI(MachineBasicBlock &MBB,
     MIB.add(MI.getOperand(0));
     break;
   }
+
+  case UG24::CALLi: {
+    // A call through a function pointer.  LJI is not usable for this: its
+    // target is {Xs, i7} -- the top nine bits come from the pair and the low
+    // seven from the immediate -- so it cannot reach an address that is only
+    // known at run time.  (What {Xs, i7} means is open specification query D5;
+    // this sequence is correct under either reading, which is the point.)
+    //
+    // Instead the return address is built from PC and put in RA, the target is
+    // pushed high byte first, and POP PC jumps to it.  The two pushes are
+    // undone by the pop, so the sequence leaves SP where it found it and the
+    // callee still sees the outgoing arguments at the right offsets.
+    //
+    //     mov  dptr0, pc      ; the address of this very instruction
+    //     mvi  r11, 0
+    //     adi  r14, 16        ; ... plus the length of the whole sequence
+    //     adc  r15, r11
+    //     mov  ra, dptr0
+    //     push target.hi
+    //     push target.lo
+    //     pop  pc
+    Register Target = MI.getOperand(0).getReg();
+    Register Lo = TRI->getSubReg(Target, sub_lo);
+    Register Hi = TRI->getSubReg(Target, sub_hi);
+    const unsigned SequenceBytes = 16;
+
+    BuildMI(MBB, MI, DL, TII->get(UG24::MOVXPC), UG24::DPTR0);
+    BuildMI(MBB, MI, DL, TII->get(UG24::MVI), UG24::R11).addImm(0);
+    BuildMI(MBB, MI, DL, TII->get(UG24::ADI), UG24::R14)
+        .addReg(UG24::R14)
+        .addImm(SequenceBytes);
+    BuildMI(MBB, MI, DL, TII->get(UG24::ADC), UG24::R15)
+        .addReg(UG24::R15)
+        .addReg(UG24::R11);
+    BuildMI(MBB, MI, DL, TII->get(UG24::MOVRAX)).addReg(UG24::DPTR0);
+    BuildMI(MBB, MI, DL, TII->get(UG24::PUSH)).addReg(Hi);
+    BuildMI(MBB, MI, DL, TII->get(UG24::PUSH)).addReg(Lo);
+    BuildMI(MBB, MI, DL, TII->get(UG24::POPPC));
+    break;
+  }
   }
 
   MI.eraseFromParent();
@@ -233,6 +273,7 @@ static bool hasPseudos(const MachineBasicBlock &MBB) {
     case UG24::XOR16:
     case UG24::BRCC:
     case UG24::CALL:
+    case UG24::CALLi:
     case UG24::MULW:
     case UG24::DIVW:
     case UG24::LOADp:

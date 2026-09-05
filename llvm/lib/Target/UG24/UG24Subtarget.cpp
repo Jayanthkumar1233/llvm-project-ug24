@@ -19,4 +19,4 @@ using namespace llvm;
 UG24Subtarget::UG24Subtarget(const Triple &TT, const std::string &CPU,
                              const std::string &FS, const TargetMachine &TM)
     : UG24GenSubtargetInfo(TT, CPU, /*TuneCPU=*/CPU, FS),
-      InstrInfo(), FrameLowering(), TLInfo(TM, *this), RegInfo() {}
+      InstrInfo(), FrameLowering(), RegInfo(), TLInfo(TM, *this), TSInfo() {}

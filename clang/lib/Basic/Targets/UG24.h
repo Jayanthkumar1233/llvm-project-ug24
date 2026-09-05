@@ -68,9 +68,16 @@ public:
     // Must stay in step with UG24TargetMachine::computeDataLayout.
     resetDataLayout("e"         // little endian
                     "-m:e"      // ELF name mangling
-                    "-p:16:16"  // 16-bit pointers, 16-bit ABI alignment
+                    "-p:16:8"   // 16-bit pointers, byte aligned -- the
+                                // stack is byte granular, so a pointer
+                                // argument can land at an odd address and
+                                // va_arg must not round the list pointer up
                     "-i8:8"     // 8-bit integers, byte aligned
                     "-i16:8"    // 16-bit integers, byte aligned
+                    "-i32:8"    // ... and 32-bit, matching LongAlign above
+                    "-i64:8"    // ... and 64-bit, matching LongLongAlign
+                    "-f32:8"    // ... and float
+                    "-f64:8"    // ... and double
                     "-a:8"      // aggregates byte aligned
                     "-n8:16"    // 8- and 16-bit native integer widths
                     "-S8"       // byte-aligned stack

@@ -21,6 +21,7 @@ add_llvm_target(UG24CodeGen
   UG24ISelLowering.cpp
   UG24MCInstLower.cpp
   UG24RegisterInfo.cpp
+  UG24SelectionDAGInfo.cpp
   UG24Subtarget.cpp
   UG24TargetMachine.cpp
 

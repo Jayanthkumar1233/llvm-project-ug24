@@ -45,6 +45,12 @@ void UG24ToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
       DriverArgs.hasArg(options::OPT_nostdlibinc))
     return;
 
+  // There is no host libc that makes sense for a 16-bit bare-metal target, so
+  // /usr/include must never be searched: its headers would compile and then
+  // fail to link, or worse, silently describe the wrong machine.  Only the
+  // uG24 headers and clang's own resource headers are visible.
+  CC1Args.push_back("-nostdsysteminc");
+
   llvm::SmallString<128> Dir(getRuntimeDir());
   llvm::sys::path::append(Dir, "include");
   if (llvm::sys::fs::exists(Dir))

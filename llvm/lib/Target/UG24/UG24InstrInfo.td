@@ -22,6 +22,8 @@ def SDT_UG24Call     : SDTypeProfile<0, -1, [SDTCisVT<0, i16>]>;
 def SDT_UG24CallSeq  : SDCallSeqStart<[SDTCisVT<0, i16>, SDTCisVT<1, i16>]>;
 def SDT_UG24CallSeqE : SDCallSeqEnd<[SDTCisVT<0, i16>, SDTCisVT<1, i16>]>;
 def SDT_UG24Cmp      : SDTypeProfile<0, 2, [SDTCisSameAs<0, 1>, SDTCisVT<0, i8>]>;
+def SDT_UG24MulW     : SDTypeProfile<1, 2, [SDTCisVT<0, i16>, SDTCisVT<1, i8>,
+                                           SDTCisSameAs<1, 2>]>;
 def SDT_UG24BrCC     : SDTypeProfile<0, 2, [SDTCisVT<0, OtherVT>,
                                             SDTCisVT<1, i8>]>;
 def SDT_UG24Wrapper  : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>,
@@ -29,6 +31,8 @@ def SDT_UG24Wrapper  : SDTypeProfile<1, 1, [SDTCisSameAs<0, 1>,
 
 def UG24retglue : SDNode<"UG24ISD::RET_GLUE", SDTNone,
                          [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
+
+def UG24mulw    : SDNode<"UG24ISD::MULW", SDT_UG24MulW>;
 
 def UG24call    : SDNode<"UG24ISD::CALL", SDT_UG24Call,
                          [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
@@ -470,8 +474,7 @@ def XOR16 : UG24Inst16<(outs GPR16:$rd), (ins GPR16:$src, GPR16:$rs),
 let isPseudo = 1, isCodeGenOnly = 1, Defs = [W, PSW] in {
 def MULW : UG24Inst16<(outs GPR16:$dst), (ins GPR:$a, GPR:$b),
                       "#MULW $dst, $a, $b",
-                      [(set GPR16:$dst, (mul (i16 (zext GPR:$a)),
-                                             (i16 (zext GPR:$b))))]>;
+                      [(set GPR16:$dst, (UG24mulw GPR:$a, GPR:$b))]>;
 
 // DIV leaves the quotient in the low half of W and the remainder in the high
 // half, which is exactly the layout of the pair.
@@ -490,6 +493,16 @@ let isCall = 1, isPseudo = 1, isCodeGenOnly = 1,
     Defs = [RA, PSW], Uses = [SP] in
 def CALL : UG24Inst16<(outs), (ins calltarget:$addr), "#CALL $addr",
                       [(UG24call tglobaladdr:$addr)]>;
+
+// Call through a function pointer.  The hardware form is LJI, whose target is
+// one of the three extended pairs; the pointer can be in any pair, so the
+// pseudo takes GPR16 and the expansion parks it in the reserved DPTR0.  Doing
+// it that way keeps W and DPTR1 free for arguments, which matters because a
+// call through a pointer usually has both of them already occupied.
+let isCall = 1, isPseudo = 1, isCodeGenOnly = 1,
+    Defs = [RA, PSW, DPTR0, R11], Uses = [SP], Size = 16 in
+def CALLi : UG24Inst16<(outs), (ins GPR16:$target), "#CALLi $target",
+                       [(UG24call GPR16:$target)]>;
 
 // Conditional branch on the flags set by a preceding CMP.  $cc is a
 // UG24CC::CondCode; expanded to the matching Bxx by UG24ExpandPseudo.

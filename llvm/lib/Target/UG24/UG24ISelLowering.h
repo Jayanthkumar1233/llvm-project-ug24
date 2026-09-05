@@ -26,6 +26,10 @@ enum NodeType : unsigned {
   SELECT_CC,
   SETCC16,
   BR_CC16,
+
+  /// 8x8 -> 16 hardware multiply.  A target node rather than a plain MUL so
+  /// that legalisation cannot hand it back to LowerMUL a second time.
+  MULW,
   WRAPPER,
   LO8,
   HI8,
