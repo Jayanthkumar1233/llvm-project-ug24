@@ -1,0 +1,6 @@
+data=1234 5678
+bss=0 0
+static bss=0
+local=BEEF
+recursive=210
+modified=1235 100

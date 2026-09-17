@@ -1,77 +1,38 @@
-#==============================================================================#
-# This file specifies intentionally untracked files that git should ignore.
-# See: http://www.kernel.org/pub/software/scm/git/docs/gitignore.html
-#
-# This file is intentionally different from the output of `git svn show-ignore`,
-# as most of those are useless.
-#==============================================================================#
 
-#==============================================================================#
-# File extensions to be ignored anywhere in the tree.
-#==============================================================================#
-# Temp files created by most text editors.
-*~
-# Merge files created by git.
-*.orig
-# Reject files created by patch.
-*.rej
-# Byte compiled python modules.
-*.pyc
-# vim swap files
-.*.sw?
-.sw?
-#OS X specific files.
-.DS_store
 
-# Ignore the user specified CMake presets in subproject directories.
-/*/CMakeUserPresets.json
+#===-- uG24 toolchain ------------------------------------------------------===
+# Build trees and installed toolchains: all reproducible from these sources.
+/build-ug24/
+/build-stage1/
+/build-arm64/
+/build-armhf/
+/build-none-eabi/
+/stage1/
+/toolchain-arm64/
+/toolchain-armhf/
+/toolchain-none-eabi/
+/sysroot-armhf/
+/sysroot-none-eabi/
 
-# Nested build directory
-/build*
+# Per-run output from compiling or simulating a test.
+*.elf
+*.dis
+*.actual
+ug24-memory.bin
 
-#==============================================================================#
-# Explicit files to ignore (only matches one).
-#==============================================================================#
-# Various tag programs
-/tags
-/TAGS
-/GPATH
-/GRTAGS
-/GSYMS
-/GTAGS
-/ID
-.gitusers
-autom4te.cache
-cscope.files
-cscope.out
-autoconf/aclocal.m4
-autoconf/autom4te.cache
-/compile_commands.json
-# Visual Studio built-in CMake configuration
-/CMakeSettings.json
-# CLion project configuration
-/.idea
+# The simulator binary is built by ug24-setup.sh.
+/ug24-sim/ug24sim
 
-#==============================================================================#
-# Directories to ignore (do not add trailing '/'s, they skip symlinks).
-#==============================================================================#
-# VS2017 and VSCode config files.
-.vscode
-.vs
-# pythonenv for github Codespaces
-pythonenv*
-# clangd index. (".clangd" is a config file now, thus trailing slash)
-.clangd/
-.cache
-# static analyzer regression testing project files
-/clang/utils/analyzer/projects/*/CachedSource
-/clang/utils/analyzer/projects/*/PatchedSource
-/clang/utils/analyzer/projects/*/ScanBuildResults
-/clang/utils/analyzer/projects/*/RefScanBuildResults
-# automodapi puts generated documentation files here.
-/lldb/docs/python_api/
+# Snapshot archives: the sources they hold are versioned here.
+*.zip
+*.tar.gz
 
-# uG24 cross-toolchain: local-only artifacts, not part of the source tree
-/llvm-project
-/cscope.po.out
-/llvm/lib.zip
+# Compiler output left beside the uG24 test sources.  Scoped to those
+# directories: .s and .ll are ordinary test inputs everywhere else in LLVM.
+/ug24-tests/**/*.s
+/ug24-tests/**/*.ll
+/ug24-tests/**/*.o
+/ug24-sim/**/*.s
+/ug24-sim/**/*.ll
+/ug24-sim/**/*.o
+!/ug24-runtime/crt0.s

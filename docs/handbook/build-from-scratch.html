@@ -1,0 +1,1468 @@
+<title>Five Compilers From Scratch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&display=swap">
+
+<style>
+  :root {
+    --ground:#FBFCFD; --surface:#F0F3F8; --sunken:#E7ECF3;
+    --ink:#101720; --muted:#58657A; --faint:#7C889A;
+    --rule:#D2DAE6; --rule-soft:#E3E9F1;
+    --copper:#B0522B; --copper-bg:#F6EAE3;
+    --trace:#1D4E7C; --trace-bg:#E4EDF6;
+    --good:#2F6B45; --good-bg:#E4F0E8;
+    --warn-bg:#F7F0DC; --warn-ink:#7A5A16;
+    --code-bg:#131A24; --code-ink:#DCE4EE; --code-dim:#7E8CA0;
+    --shadow: 0 1px 2px rgba(16,23,32,.06), 0 8px 24px -16px rgba(16,23,32,.28);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:#0C1119; --surface:#141B25; --sunken:#1B2430;
+      --ink:#E3E9F1; --muted:#9DAABC; --faint:#768395;
+      --rule:#26303D; --rule-soft:#1D2732;
+      --copper:#E08A5E; --copper-bg:#2A1B13;
+      --trace:#74AEE0; --trace-bg:#12222F;
+      --good:#7BBF95; --good-bg:#12241A;
+      --warn-bg:#2A2312; --warn-ink:#D6BC77;
+      --code-bg:#070B11; --code-ink:#D6DFEA; --code-dim:#6C7A8E;
+      --shadow: 0 1px 2px rgba(0,0,0,.5), 0 10px 30px -18px rgba(0,0,0,.9);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#0C1119; --surface:#141B25; --sunken:#1B2430;
+    --ink:#E3E9F1; --muted:#9DAABC; --faint:#768395;
+    --rule:#26303D; --rule-soft:#1D2732;
+    --copper:#E08A5E; --copper-bg:#2A1B13;
+    --trace:#74AEE0; --trace-bg:#12222F;
+    --good:#7BBF95; --good-bg:#12241A;
+    --warn-bg:#2A2312; --warn-ink:#D6BC77;
+    --code-bg:#070B11; --code-ink:#D6DFEA; --code-dim:#6C7A8E;
+    --shadow: 0 1px 2px rgba(0,0,0,.5), 0 10px 30px -18px rgba(0,0,0,.9);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:"IBM Plex Serif",Georgia,serif; font-size:17px; line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap { max-width:1180px; margin:0 auto; padding:0 28px 96px; }
+
+  header.masthead { border-bottom:2px solid var(--ink); padding:56px 0 22px; }
+  .eyebrow { font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-weight:500;
+    letter-spacing:.16em; text-transform:uppercase; color:var(--copper); margin:0 0 14px; }
+  h1 { font-family:"IBM Plex Sans",system-ui,sans-serif; font-size:clamp(34px,5.4vw,55px);
+    font-weight:700; letter-spacing:-.028em; line-height:1.04; margin:0 0 16px; text-wrap:balance; }
+  .standfirst { font-size:19px; color:var(--muted); max-width:64ch; margin:0; }
+
+  .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:1px; background:var(--rule); border:1px solid var(--rule); margin:34px 0 0; }
+  .fact { background:var(--surface); padding:14px 16px; }
+  .fact dt { font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--faint); margin:0 0 5px; }
+  .fact dd { margin:0; font-family:"IBM Plex Sans",sans-serif; font-size:15px;
+    font-weight:600; letter-spacing:-.01em; font-variant-numeric:tabular-nums; }
+
+  .shell { display:block; }
+  @media (min-width:1000px) {
+    .shell { display:grid; grid-template-columns:216px minmax(0,1fr); gap:56px; align-items:start; }
+    nav.toc { position:sticky; top:28px; }
+  }
+  nav.toc { padding-top:46px; }
+  nav.toc h2 { font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--faint); font-weight:500; margin:0 0 12px;
+    padding-bottom:10px; border-bottom:1px solid var(--rule); }
+  nav.toc ol { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:2px; }
+  nav.toc a { display:grid; grid-template-columns:26px 1fr; gap:6px;
+    font-family:"IBM Plex Sans",sans-serif; font-size:13.5px; line-height:1.35;
+    color:var(--muted); text-decoration:none; padding:5px 6px 5px 0; border-radius:3px; }
+  nav.toc a span.n { font-family:"IBM Plex Mono",monospace; font-size:11px;
+    color:var(--faint); font-variant-numeric:tabular-nums; }
+  nav.toc a:hover, nav.toc a:hover span.n { color:var(--copper); }
+  nav.toc a:focus-visible { outline:2px solid var(--copper); outline-offset:2px; }
+
+  main { padding-top:46px; min-width:0; }
+  section { margin-bottom:62px; scroll-margin-top:24px; }
+  .sec-head { display:flex; align-items:baseline; gap:13px; margin-bottom:6px; }
+  .sec-num { font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:500;
+    color:var(--copper); letter-spacing:.06em; padding-top:2px; }
+  h2.sec { font-family:"IBM Plex Sans",sans-serif; font-size:clamp(23px,3vw,30px);
+    font-weight:650; letter-spacing:-.021em; line-height:1.15; margin:0; text-wrap:balance; }
+  .sec-rule { height:1px; background:var(--rule); margin:14px 0 24px; }
+
+  h3 { font-family:"IBM Plex Sans",sans-serif; font-size:17.5px; font-weight:650;
+    letter-spacing:-.012em; margin:34px 0 10px; text-wrap:balance; }
+  h4 { font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-weight:600;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--faint); margin:26px 0 9px; }
+
+  p { margin:0 0 15px; max-width:68ch; }
+  main ul, main ol { margin:0 0 16px; padding-left:21px; max-width:66ch; }
+  main li { margin-bottom:7px; }
+  strong { font-weight:600; }
+  a { color:var(--trace); text-underline-offset:2px; }
+  code { font-family:"IBM Plex Mono",monospace; font-size:.855em; background:var(--sunken);
+    padding:.1em .34em; border-radius:3px; color:var(--ink); }
+
+  .step { display:flex; align-items:baseline; gap:10px; margin:30px 0 10px; }
+  .step .id { font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:600;
+    background:var(--copper-bg); color:var(--copper); padding:3px 9px; border-radius:3px;
+    white-space:nowrap; }
+  .step .what { font-family:"IBM Plex Sans",sans-serif; font-size:16px; font-weight:600;
+    letter-spacing:-.01em; }
+
+  .cmd { background:var(--code-bg); border-radius:5px; margin:0 0 16px; overflow:hidden;
+    box-shadow:var(--shadow); }
+  .cmd-label { font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--code-dim); padding:9px 15px 0; }
+  .cmd pre { margin:0; padding:10px 15px 15px; overflow-x:auto;
+    font-family:"IBM Plex Mono",monospace; font-size:13.5px; line-height:1.62;
+    color:var(--code-ink); tab-size:4; }
+  .cmd pre .p { color:var(--code-dim); }
+  .cmd pre .o { color:#7FCB9B; }
+  .cmd pre .k { color:#85B8E8; }
+  .cmd pre .w { color:#E0A46E; }
+
+  .expect { border-left:3px solid var(--good); background:var(--good-bg);
+    border-radius:0 4px 4px 0; margin:-8px 0 18px; padding:0; overflow:hidden; }
+  .expect .lbl { font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--good); font-weight:600; padding:9px 15px 0; display:block; }
+  .expect pre { margin:0; padding:5px 15px 13px; overflow-x:auto;
+    font-family:"IBM Plex Mono",monospace; font-size:13px; line-height:1.55; color:var(--ink); }
+
+  .tw { overflow-x:auto; margin:0 0 18px; border:1px solid var(--rule); border-radius:4px; }
+  table { border-collapse:collapse; width:100%; font-size:14.5px; }
+  th, td { text-align:left; padding:9px 14px; border-bottom:1px solid var(--rule-soft); vertical-align:top; }
+  thead th { background:var(--surface); font-family:"IBM Plex Mono",monospace; font-size:10.5px;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--faint); font-weight:600;
+    border-bottom:1px solid var(--rule); white-space:nowrap; }
+  tbody tr:last-child td { border-bottom:none; }
+  td code { background:none; padding:0; color:var(--trace); }
+  td.mono, th.mono { font-family:"IBM Plex Mono",monospace; font-size:13px;
+    font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+  .note { border-left:3px solid var(--copper); background:var(--copper-bg); padding:14px 18px;
+    margin:0 0 18px; border-radius:0 4px 4px 0; max-width:68ch; }
+  .note p:last-child { margin-bottom:0; }
+  .note .tag { display:block; font-family:"IBM Plex Mono",monospace; font-size:10.5px;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--copper); margin-bottom:6px; font-weight:600; }
+  .note.caution { border-left-color:var(--warn-ink); background:var(--warn-bg); }
+  .note.caution .tag { color:var(--warn-ink); }
+
+  .time { display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:11px;
+    color:var(--faint); letter-spacing:.04em; border:1px solid var(--rule);
+    padding:1px 7px; border-radius:10px; margin-left:8px; vertical-align:middle; }
+
+  footer { border-top:1px solid var(--rule); margin-top:20px; padding-top:20px;
+    font-size:13.5px; color:var(--faint); font-family:"IBM Plex Sans",sans-serif; }
+
+  @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">Build procedure · Rev 2.0 · supersedes v1.1</p>
+  <h1>Five Compilers From Scratch</h1>
+  <p class="standfirst">
+    Complete step-by-step procedure for building the x86 host compiler and four
+    cross compilers — ARM32, ARM64, ARM bare-metal and the custom uG24 — on a
+    new machine. Every command carries its expected output.
+  </p>
+  <dl class="facts">
+    <div class="fact"><dt>LLVM</dt><dd>17.0.6</dd></div>
+    <div class="fact"><dt>Host</dt><dd>x86-64 Linux</dd></div>
+    <div class="fact"><dt>Stages</dt><dd>1 host + 4 cross</dd></div>
+    <div class="fact"><dt>Disk</dt><dd>~80 GB</dd></div>
+    <div class="fact"><dt>Time</dt><dd>4–8 hours</dd></div>
+  </dl>
+</header>
+
+<div class="shell">
+
+<nav class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#s1"><span class="n">1</span><span>Overview</span></a></li>
+    <li><a href="#s2"><span class="n">2</span><span>Host prerequisites</span></a></li>
+    <li><a href="#s3"><span class="n">3</span><span>Obtain the source</span></a></li>
+    <li><a href="#s4"><span class="n">4</span><span>Prepare sysroots</span></a></li>
+    <li><a href="#s5"><span class="n">5</span><span>Stage 1 — host clang</span></a></li>
+    <li><a href="#s6"><span class="n">6</span><span>Stage 2 — cross compilers</span></a></li>
+    <li><a href="#s7"><span class="n">7</span><span>compiler-rt builtins</span></a></li>
+    <li><a href="#s8"><span class="n">8</span><span>uG24 target</span></a></li>
+    <li><a href="#s9"><span class="n">9</span><span>Wrappers &amp; CMake files</span></a></li>
+    <li><a href="#s10"><span class="n">10</span><span>Verification</span></a></li>
+    <li><a href="#s11"><span class="n">11</span><span>Troubleshooting</span></a></li>
+    <li><a href="#s12"><span class="n">12</span><span>Checklist</span></a></li>
+  </ol>
+</nav>
+
+<main>
+
+<!-- ================================================================= -->
+<section id="s1">
+  <div class="sec-head"><span class="sec-num">1</span><h2 class="sec">Overview</h2></div>
+  <div class="sec-rule"></div>
+
+  <p>
+    This procedure produces five compilers. Stage 1 is a native x86 clang used
+    only as a build tool; the four that follow are the deliverables.
+  </p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>Compiler</th><th class="mono">Triple</th><th>Use</th><th>Runs on</th></tr></thead>
+      <tbody>
+        <tr><td><strong>stage1</strong></td><td class="mono">x86_64-linux-gnu</td><td>Builds the other four</td><td>host</td></tr>
+        <tr><td><strong>toolchain-armhf</strong></td><td class="mono">armv7-linux-gnueabihf</td><td>32-bit ARM Linux userspace</td><td><code>qemu-arm</code></td></tr>
+        <tr><td><strong>toolchain-arm64</strong></td><td class="mono">aarch64-linux-gnu</td><td>64-bit ARM Linux userspace</td><td><code>qemu-aarch64</code></td></tr>
+        <tr><td><strong>toolchain-none-eabi</strong></td><td class="mono">arm-none-eabi</td><td>Cortex-M bare metal</td><td><code>qemu-system-arm</code></td></tr>
+        <tr><td><strong>build-ug24</strong></td><td class="mono">ug24-unknown-none-eabi</td><td>Custom 8-bit processor</td><td><code>ug24sim</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>What you carry to the new machine</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Item</th><th>Contains</th><th class="mono">Size</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Git repository</strong><br><code>llvm-project-ug24</code></td>
+            <td>LLVM monorepo including the uG24 back end (29 files), the lld
+                back end, the clang target and driver, and the ELF machine and
+                relocation definitions.</td><td class="mono">~2 GB</td></tr>
+        <tr><td><strong>Support bundle</strong><br><code>ug24-support-files.tar.gz</code></td>
+            <td>uG24 runtime, simulator, tests, helper scripts, CMake toolchain
+                file, documentation. None of this belongs in the LLVM tree.</td><td class="mono">35 KB</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Final directory layout</h3>
+  <div class="cmd"><div class="cmd-label">layout</div>
+<pre>$HOME/llvm-arm-cross/
+├── llvm-project/           <span class="p"># git clone (contains all build-* dirs)</span>
+├── sysroot-none-eabi/      <span class="p"># §4.4</span>
+├── ug24-runtime/           <span class="p"># bundle</span>
+├── ug24-sim/               <span class="p"># bundle</span>
+├── ug24-tests/             <span class="p"># bundle</span>
+├── arm-tests/              <span class="p"># bundle</span>
+├── docs/                   <span class="p"># bundle</span>
+├── toolchain-ug24.cmake    <span class="p"># bundle</span>
+├── ug24-setup.sh           <span class="p"># bundle</span>
+│
+├── stage1/                 <span class="p"># §5</span>
+├── toolchain-armhf/        <span class="p"># §6.1</span>
+├── toolchain-arm64/        <span class="p"># §6.2</span>
+├── toolchain-none-eabi/    <span class="p"># §6.3</span>
+└── build-ug24/             <span class="p"># §8</span></pre>
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<section id="s2">
+  <div class="sec-head"><span class="sec-num">2</span><h2 class="sec">Host prerequisites</h2></div>
+  <div class="sec-rule"></div>
+
+  <h3>2.1  Hardware and OS</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Item</th><th>Minimum</th><th>Recommended</th></tr></thead>
+      <tbody>
+        <tr><td>Host OS</td><td class="mono">Ubuntu 22.04 / Debian 12</td><td class="mono">Ubuntu 22.04 LTS</td></tr>
+        <tr><td>Architecture</td><td class="mono">x86_64</td><td class="mono">x86_64</td></tr>
+        <tr><td>RAM</td><td class="mono">16 GB</td><td class="mono">32 GB</td></tr>
+        <tr><td>Free disk</td><td class="mono">80 GB</td><td class="mono">120 GB</td></tr>
+        <tr><td>CPU cores</td><td class="mono">4</td><td class="mono">8+</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>2.2  Install build dependencies</h3>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>sudo apt update &amp;&amp; sudo apt install -y \
+    build-essential git cmake ninja-build python3 python3-pip \
+    pkg-config libssl-dev zlib1g-dev libedit-dev libxml2-dev \
+    libffi-dev swig doxygen \
+    gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
+    gcc-aarch64-linux-gnu   g++-aarch64-linux-gnu \
+    gcc-arm-none-eabi       binutils-arm-none-eabi \
+    libc6-dev-armhf-cross   linux-libc-dev-armhf-cross \
+    qemu-user-static        qemu-system-arm  xxd</pre>
+  </div>
+
+  <div class="note">
+    <span class="tag">Why the GCC cross packages</span>
+    <p>
+      They are not used to compile your code. They supply the
+      <strong>sysroots</strong> — target headers and libc — and the
+      <code>libgcc</code> and <code>crtbegin</code> objects that clang links
+      against for hosted targets. <code>swig</code> and <code>libedit-dev</code>
+      are required by LLDB. <code>qemu-system-arm</code> is needed to execute
+      bare-metal images.
+    </p>
+  </div>
+
+  <h3>2.3  Verify tool versions</h3>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>cmake --version    <span class="p"># must be >= 3.20</span>
+ninja --version    <span class="p"># must be >= 1.10</span>
+python3 --version  <span class="p"># must be >= 3.6</span></pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>cmake version 3.28.3
+1.11.1
+Python 3.12.3</pre></div>
+
+  <p>If CMake is too old: <code>pip3 install --upgrade cmake</code></p>
+
+  <h3>2.4  Environment variables</h3>
+  <p>Add these to <code>~/.bashrc</code> so they survive new shells.</p>
+  <div class="cmd"><div class="cmd-label">~/.bashrc</div>
+<pre><span class="k">export</span> LLVM_WORK=$HOME/llvm-arm-cross
+<span class="k">export</span> SYSROOT_ARMHF=/usr/arm-linux-gnueabihf
+<span class="k">export</span> SYSROOT_ARM64=/usr/aarch64-linux-gnu
+<span class="k">export</span> SYSROOT_NONE=$LLVM_WORK/sysroot-none-eabi
+
+<span class="k">export</span> PATH=$LLVM_WORK/stage1/bin:$PATH</pre>
+  </div>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>source ~/.bashrc &amp;&amp; echo "$LLVM_WORK | $SYSROOT_ARMHF"</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>/home/&lt;user&gt;/llvm-arm-cross | /usr/arm-linux-gnueabihf</pre></div>
+
+  <div class="note caution">
+    <span class="tag">An unset variable fails silently</span>
+    <p>
+      <code>--sysroot=$SYSROOT_ARMHF</code> with the variable unset expands to
+      <code>--sysroot=</code>, which clang accepts and ignores. The result is a
+      confusing <em>stdio.h not found</em> much later. Always confirm the echo
+      above before building.
+    </p>
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<section id="s3">
+  <div class="sec-head"><span class="sec-num">3</span><h2 class="sec">Obtain the source</h2></div>
+  <div class="sec-rule"></div>
+
+  <h3>3.1  Clone the repository</h3>
+  <p>
+    This is not upstream LLVM. It is the monorepo with the uG24 back end already
+    merged in, so one clone gives all five compilers.
+  </p>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>mkdir -p $LLVM_WORK &amp;&amp; cd $LLVM_WORK
+
+git clone --depth 1 \
+    git@github.com:Jayanthkumar1233/llvm-project-ug24.git llvm-project
+
+cd llvm-project &amp;&amp; git log --oneline -1</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>cb00f5815 Untrack nested LLVM checkout and local build artifacts</pre></div>
+
+  <h3>3.2  Unpack the support bundle</h3>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>cd $LLVM_WORK
+tar xzf /path/to/ug24-support-files.tar.gz --strip-components=1
+ls</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>arm-tests  docs  llvm-project  toolchain-ug24.cmake
+ug24-runtime  ug24-setup.sh  ug24-sim  ug24-tests</pre></div>
+
+  <h3>3.3  Confirm the uG24 target arrived</h3>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>ls llvm-project/llvm/lib/Target/UG24/ | wc -l
+ls llvm-project/lld/ELF/Arch/UG24.cpp
+grep -c EM_UG24 llvm-project/llvm/include/llvm/BinaryFormat/ELF.h</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>29
+llvm-project/lld/ELF/Arch/UG24.cpp
+1</pre></div>
+</section>
+
+<!-- ================================================================= -->
+<section id="s4">
+  <div class="sec-head"><span class="sec-num">4</span><h2 class="sec">Prepare the sysroots</h2></div>
+  <div class="sec-rule"></div>
+
+  <p>
+    A sysroot is a directory tree holding the target's headers and libraries.
+    Clang uses <code>--sysroot</code> to find them without touching host paths.
+  </p>
+
+  <h3>4.1  Sysroot options</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Method</th><th>Best for</th><th>How</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Option A</strong> — installed GCC sysroot</td><td>Quick start, already on the host</td><td class="mono">/usr/arm-linux-gnueabihf</td></tr>
+        <tr><td><strong>Option B</strong> — debootstrap</td><td>A clean minimal Debian rootfs</td><td class="mono">sudo debootstrap --arch armhf ...</td></tr>
+        <tr><td><strong>Option C</strong> — newlib copy</td><td>Bare metal, no OS</td><td class="mono">cp /usr/lib/arm-none-eabi/...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>4.2  Option A — use the installed GCC sysroot <em>(recommended)</em></h3>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre><span class="p"># 32-bit ARM hard-float</span>
+<span class="k">export</span> SYSROOT_ARMHF=/usr/arm-linux-gnueabihf
+
+<span class="p"># 64-bit ARM</span>
+<span class="k">export</span> SYSROOT_ARM64=/usr/aarch64-linux-gnu
+
+<span class="p"># Verify headers and libraries are present</span>
+ls $SYSROOT_ARMHF/include/ | head -6
+ls $SYSROOT_ARMHF/lib/ | grep -E <span class="o">'^lib(c|m)\.'</span></pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>aio.h  aliases.h  alloca.h  a.out.h  argp.h  argz.h
+libc.a
+libc.so
+libc.so.6
+libm.a</pre></div>
+
+  <h3>4.3  Option B — build a clean sysroot with debootstrap</h3>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre><span class="k">export</span> SYSROOT_ARMHF=$LLVM_WORK/sysroot-armhf
+mkdir -p $SYSROOT_ARMHF
+
+sudo debootstrap --arch=armhf \
+    --include=libstdc++-12-dev,libc6-dev,libgcc-12-dev \
+    bullseye $SYSROOT_ARMHF http://deb.debian.org/debian
+
+<span class="p"># Fix absolute symlinks, which break when read from the host</span>
+cd $SYSROOT_ARMHF
+find . -type l | while read link; do
+    target=$(readlink "$link")
+    [ "${target#/}" != "$target" ] &amp;&amp; ln -sf "${SYSROOT_ARMHF}${target}" "$link"
+done
+
+<span class="p"># MUST verify - a partial debootstrap looks like success</span>
+ls $SYSROOT_ARMHF/usr/include/stdio.h
+find $SYSROOT_ARMHF -name 'libc.so*' | head -2</pre>
+  </div>
+
+  <div class="note caution">
+    <span class="tag">Option B failed on the previous build — verify it</span>
+    <p>
+      The debootstrap in the earlier build died after downloading the package
+      index, leaving a directory with <strong>five files and no libc</strong>.
+      <code>debootstrap</code> exits without an obvious error, and the failure
+      only surfaces later as unresolvable link errors. If the two checks above
+      do not both succeed, delete the directory and use Option A.
+    </p>
+  </div>
+
+  <h3>4.4  Option C — bare-metal sysroot (arm-none-eabi)</h3>
+  <p>For Cortex-M there is no OS; the sysroot is newlib headers and archives.</p>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre><span class="k">export</span> SYSROOT_NONE=$LLVM_WORK/sysroot-none-eabi
+mkdir -p $SYSROOT_NONE/include $SYSROOT_NONE/lib
+
+cp -r /usr/lib/arm-none-eabi/include/* $SYSROOT_NONE/include/
+cp    /usr/lib/arm-none-eabi/lib/*.a    $SYSROOT_NONE/lib/
+
+ls $SYSROOT_NONE/include/ | head -5
+ls $SYSROOT_NONE/lib/*.a | head -4 | xargs -n1 basename</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>alloca.h  _ansi.h  argz.h  ar.h  assert.h
+libc.a
+libc_nano.a
+libg.a
+libgloss-linux.a</pre></div>
+</section>
+
+<!-- ================================================================= -->
+<section id="s5">
+  <div class="sec-head"><span class="sec-num">5</span><h2 class="sec">Stage 1 — native host clang</h2></div>
+  <div class="sec-rule"></div>
+
+  <p>
+    Stage 1 is an x86_64 clang with the ARM and AArch64 back ends enabled. It is
+    used to build every later stage: clang building clang produces a better
+    result than the system GCC, and guarantees all stages use one front end.
+    <span class="time">40–90 min on 8 cores</span>
+  </p>
+
+  <div class="step"><span class="id">5.1</span><span class="what">Create the build directory</span></div>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>cd $LLVM_WORK/llvm-project
+mkdir -p build-stage1 &amp;&amp; cd build-stage1</pre>
+  </div>
+
+  <div class="step"><span class="id">5.2</span><span class="what">Configure with CMake</span></div>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>cmake -G Ninja ../llvm \
+    <span class="k">-DCMAKE_BUILD_TYPE</span>=Release \
+    <span class="k">-DCMAKE_INSTALL_PREFIX</span>=$LLVM_WORK/stage1 \
+    <span class="k">-DLLVM_TARGETS_TO_BUILD</span>=<span class="o">"X86;ARM;AArch64"</span> \
+    <span class="k">-DLLVM_ENABLE_PROJECTS</span>=<span class="o">"clang;lld"</span> \
+    <span class="k">-DLLVM_ENABLE_RUNTIMES</span>=<span class="o">""</span> \
+    <span class="k">-DLLVM_BUILD_TOOLS</span>=ON \
+    <span class="k">-DLLVM_INCLUDE_TESTS</span>=OFF \
+    <span class="k">-DLLVM_INCLUDE_EXAMPLES</span>=OFF \
+    <span class="k">-DCLANG_DEFAULT_LINKER</span>=lld \
+    <span class="k">-DLLVM_PARALLEL_LINK_JOBS</span>=1</pre>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th class="mono">Flag</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">LLVM_TARGETS_TO_BUILD</td><td>Host (X86) plus both ARM back ends</td></tr>
+        <tr><td class="mono">LLVM_ENABLE_PROJECTS</td><td>Clang and LLD. LLDB is added in Stage 2 only</td></tr>
+        <tr><td class="mono">LLVM_ENABLE_RUNTIMES=""</td><td>No compiler-rt or libcxx here — Stage 1 is a build tool, not a shipped toolchain</td></tr>
+        <tr><td class="mono">LLVM_BUILD_TOOLS=ON</td><td>Builds <code>llvm-config</code>, <code>llvm-ar</code>, <code>llvm-nm</code> etc., needed by later stages</td></tr>
+        <tr><td class="mono">CMAKE_BUILD_TYPE=Release</td><td>Never use Debug: 3× larger, far slower</td></tr>
+        <tr><td class="mono">LLVM_PARALLEL_LINK_JOBS=1</td><td>Each link job needs several GB. Parallel links get OOM-killed on 16 GB</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="step"><span class="id">5.3</span><span class="what">Build and install</span></div>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>ninja -j$(nproc) install
+
+$LLVM_WORK/stage1/bin/clang --version
+$LLVM_WORK/stage1/bin/llvm-config --targets-built</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>clang version 17.0.6 (https://github.com/llvm/llvm-project.git 6009708b...)
+Target: x86_64-unknown-linux-gnu
+Thread model: posix
+
+X86 ARM AArch64</pre></div>
+
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre><span class="p"># Stage 1 must be on PATH for every step that follows</span>
+<span class="k">export</span> PATH=$LLVM_WORK/stage1/bin:$PATH</pre>
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<section id="s6">
+  <div class="sec-head"><span class="sec-num">6</span><h2 class="sec">Stage 2 — the ARM cross compilers</h2></div>
+  <div class="sec-rule"></div>
+
+  <p>
+    Each target gets its own independent build directory. All three use the
+    Stage 1 clang as the compiler.
+  </p>
+
+  <!-- ---------------- 6.1 ---------------- -->
+  <h3>6.1  Target A — armv7-linux-gnueabihf</h3>
+  <p>32-bit ARM Linux userspace.<span class="time">60–120 min</span></p>
+
+  <div class="step"><span class="id">6.1.1</span><span class="what">Configure</span></div>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>cd $LLVM_WORK/llvm-project
+mkdir -p build-armhf &amp;&amp; cd build-armhf
+
+cmake -G Ninja ../llvm \
+    <span class="k">-DCMAKE_BUILD_TYPE</span>=Release \
+    <span class="k">-DCMAKE_INSTALL_PREFIX</span>=$LLVM_WORK/toolchain-armhf \
+    <span class="k">-DCMAKE_C_COMPILER</span>=$LLVM_WORK/stage1/bin/clang \
+    <span class="k">-DCMAKE_CXX_COMPILER</span>=$LLVM_WORK/stage1/bin/clang++ \
+    <span class="k">-DLLVM_TARGETS_TO_BUILD</span>=<span class="o">"ARM"</span> \
+    <span class="k">-DLLVM_ENABLE_PROJECTS</span>=<span class="o">"clang;lld;lldb"</span> \
+    <span class="k">-DLLVM_ENABLE_RUNTIMES</span>=<span class="o">""</span> \
+    <span class="k">-DLLVM_DEFAULT_TARGET_TRIPLE</span>=<span class="o">"armv7-linux-gnueabihf"</span> \
+    <span class="k">-DLLVM_HOST_TRIPLE</span>=<span class="o">"x86_64-linux-gnu"</span> \
+    <span class="k">-DCLANG_DEFAULT_LINKER</span>=lld \
+    <span class="k">-DDEFAULT_SYSROOT</span>=$SYSROOT_ARMHF \
+    <span class="k">-DLLVM_PARALLEL_LINK_JOBS</span>=1 \
+    <span class="k">-DLLVM_INCLUDE_TESTS</span>=OFF \
+    <span class="k">-DLLVM_INCLUDE_EXAMPLES</span>=OFF \
+    <span class="k">-DCMAKE_BUILD_WITH_INSTALL_RPATH</span>=ON</pre>
+  </div>
+
+  <div class="note">
+    <span class="tag">CMAKE_BUILD_WITH_INSTALL_RPATH=ON</span>
+    <p>
+      LLDB links against shared LLVM libraries. Without this, the installed
+      <code>lldb</code> keeps an RPATH pointing into the <em>build</em>
+      directory and fails once that directory is deleted. This was found during
+      the v1.1 build validation and is required whenever <code>lldb</code> is in
+      <code>LLVM_ENABLE_PROJECTS</code>.
+    </p>
+  </div>
+
+  <div class="step"><span class="id">6.1.2</span><span class="what">Build and install</span></div>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>ninja -j$(nproc) install</pre>
+  </div>
+
+  <div class="step"><span class="id">6.1.3</span><span class="what">Verify the toolchain itself</span></div>
+  <p>Confirm the compiler before compiling anything with it.</p>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>$LLVM_WORK/toolchain-armhf/bin/clang \
+    <span class="k">--target</span>=armv7-linux-gnueabihf \
+    <span class="k">--sysroot</span>=$SYSROOT_ARMHF \
+    <span class="k">--print-target-triple</span>
+
+$LLVM_WORK/toolchain-armhf/bin/llvm-config --targets-built
+$LLVM_WORK/toolchain-armhf/bin/lldb --version | head -1</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>armv7-unknown-linux-gnueabihf
+ARM
+lldb version 17.0.6 (https://github.com/llvm/llvm-project.git revision 6009708b...)</pre></div>
+
+  <div class="note">
+    <span class="tag">The triple gains "unknown"</span>
+    <p>
+      Clang normalises <code>armv7-linux-gnueabihf</code> into the four-field
+      form <code>armv7-unknown-linux-gnueabihf</code>. That is correct — the
+      vendor field is simply made explicit. Rev 1.1 of this document expected
+      the three-field form.
+    </p>
+  </div>
+
+  <!-- ---------------- 6.2 ---------------- -->
+  <h3>6.2  Target B — aarch64-linux-gnu</h3>
+  <p>64-bit ARM Linux userspace.<span class="time">60–120 min</span></p>
+
+  <div class="step"><span class="id">6.2.1</span><span class="what">Configure, build and install</span></div>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>cd $LLVM_WORK/llvm-project
+mkdir -p build-arm64 &amp;&amp; cd build-arm64
+
+cmake -G Ninja ../llvm \
+    <span class="k">-DCMAKE_BUILD_TYPE</span>=Release \
+    <span class="k">-DCMAKE_INSTALL_PREFIX</span>=$LLVM_WORK/toolchain-arm64 \
+    <span class="k">-DCMAKE_C_COMPILER</span>=$LLVM_WORK/stage1/bin/clang \
+    <span class="k">-DCMAKE_CXX_COMPILER</span>=$LLVM_WORK/stage1/bin/clang++ \
+    <span class="k">-DLLVM_TARGETS_TO_BUILD</span>=<span class="o">"AArch64"</span> \
+    <span class="k">-DLLVM_ENABLE_PROJECTS</span>=<span class="o">"clang;lld;lldb"</span> \
+    <span class="k">-DLLVM_ENABLE_RUNTIMES</span>=<span class="o">""</span> \
+    <span class="k">-DLLVM_DEFAULT_TARGET_TRIPLE</span>=<span class="o">"aarch64-linux-gnu"</span> \
+    <span class="k">-DLLVM_HOST_TRIPLE</span>=<span class="o">"x86_64-linux-gnu"</span> \
+    <span class="k">-DCLANG_DEFAULT_LINKER</span>=lld \
+    <span class="k">-DDEFAULT_SYSROOT</span>=$SYSROOT_ARM64 \
+    <span class="k">-DLLVM_PARALLEL_LINK_JOBS</span>=1 \
+    <span class="k">-DLLVM_INCLUDE_TESTS</span>=OFF \
+    <span class="k">-DLLVM_INCLUDE_EXAMPLES</span>=OFF \
+    <span class="k">-DCMAKE_BUILD_WITH_INSTALL_RPATH</span>=ON
+
+ninja -j$(nproc) install</pre>
+  </div>
+
+  <div class="step"><span class="id">6.2.2</span><span class="what">Verify</span></div>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>$LLVM_WORK/toolchain-arm64/bin/clang \
+    <span class="k">--target</span>=aarch64-linux-gnu \
+    <span class="k">--sysroot</span>=$SYSROOT_ARM64 \
+    <span class="k">--print-target-triple</span>
+
+$LLVM_WORK/toolchain-arm64/bin/llvm-config --targets-built</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>aarch64-unknown-linux-gnu
+AArch64</pre></div>
+
+  <!-- ---------------- 6.3 ---------------- -->
+  <h3>6.3  Target C — arm-none-eabi (Cortex-M bare metal)</h3>
+  <p>No OS, no dynamic linking.<span class="time">60–120 min</span></p>
+
+  <div class="note caution">
+    <span class="tag">compiler-rt must not go in LLVM_ENABLE_RUNTIMES here</span>
+    <p>
+      If <code>compiler-rt</code> is listed in <code>LLVM_ENABLE_RUNTIMES</code>
+      for this build, the runtimes sub-build auto-selects
+      <code>-mfloat-abi=soft</code>, which disables the VFP registers. The VFP
+      assembly builtins (<code>fixunssfsivfp.S</code> and friends) then fail
+      with <em>instruction requires: VFP2</em>.
+    </p>
+    <p>
+      The <code>COMPILER_RT_*</code> flags below are cache variables. They are
+      harmless here — nothing reads them while compiler-rt is not being
+      configured — and are kept so the same cache serves §7.2. The builtins are
+      actually built in §7.2, where the correct <code>-mfpu</code> and
+      <code>-mfloat-abi</code> flags are given explicitly.
+    </p>
+  </div>
+
+  <div class="step"><span class="id">6.3.1</span><span class="what">Configure, build and install</span></div>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>cd $LLVM_WORK/llvm-project
+mkdir -p build-none-eabi &amp;&amp; cd build-none-eabi
+
+cmake -G Ninja ../llvm \
+    <span class="k">-DCMAKE_BUILD_TYPE</span>=Release \
+    <span class="k">-DCMAKE_INSTALL_PREFIX</span>=$LLVM_WORK/toolchain-none-eabi \
+    <span class="k">-DCMAKE_C_COMPILER</span>=$LLVM_WORK/stage1/bin/clang \
+    <span class="k">-DCMAKE_CXX_COMPILER</span>=$LLVM_WORK/stage1/bin/clang++ \
+    <span class="k">-DLLVM_TARGETS_TO_BUILD</span>=<span class="o">"ARM"</span> \
+    <span class="k">-DLLVM_ENABLE_PROJECTS</span>=<span class="o">"clang;lld"</span> \
+    <span class="k">-DLLVM_ENABLE_RUNTIMES</span>=<span class="o">""</span> \
+    <span class="k">-DLLVM_DEFAULT_TARGET_TRIPLE</span>=<span class="o">"arm-none-eabi"</span> \
+    <span class="k">-DLLVM_HOST_TRIPLE</span>=<span class="o">"x86_64-linux-gnu"</span> \
+    <span class="k">-DCLANG_DEFAULT_LINKER</span>=lld \
+    <span class="k">-DCOMPILER_RT_BAREMETAL_BUILD</span>=ON \
+    <span class="k">-DCOMPILER_RT_BUILD_BUILTINS</span>=ON \
+    <span class="k">-DCOMPILER_RT_BUILD_SANITIZERS</span>=OFF \
+    <span class="k">-DCOMPILER_RT_BUILD_XRAY</span>=OFF \
+    <span class="k">-DCOMPILER_RT_BUILD_LIBFUZZER</span>=OFF \
+    <span class="k">-DCOMPILER_RT_BUILD_PROFILE</span>=OFF \
+    <span class="k">-DLLVM_PARALLEL_LINK_JOBS</span>=1 \
+    <span class="k">-DLLVM_INCLUDE_TESTS</span>=OFF
+
+ninja -j$(nproc) install</pre>
+  </div>
+
+  <p>
+    LLDB is deliberately absent here: there is no OS to attach to, and remote
+    debugging a Cortex-M part goes through a JTAG probe rather than LLDB's
+    process plugins.
+  </p>
+
+  <div class="step"><span class="id">6.3.2</span><span class="what">Verify</span></div>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>$LLVM_WORK/toolchain-none-eabi/bin/clang \
+    <span class="k">--target</span>=arm-none-eabi <span class="k">--print-target-triple</span>
+
+$LLVM_WORK/toolchain-none-eabi/bin/llvm-config --targets-built</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>arm-none-unknown-eabi
+ARM</pre></div>
+</section>
+
+<!-- ================================================================= -->
+<section id="s7">
+  <div class="sec-head"><span class="sec-num">7</span><h2 class="sec">compiler-rt builtins</h2></div>
+  <div class="sec-rule"></div>
+
+  <p>
+    compiler-rt supplies the low-level routines clang emits calls to — 64-bit
+    division, soft-float, stack protection — replacing libgcc. It must be
+    cross-compiled once per target architecture.
+  </p>
+
+  <h3>7.1  compiler-rt for armv7-linux-gnueabihf</h3>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>cd $LLVM_WORK/llvm-project
+mkdir -p build-rt-armhf &amp;&amp; cd build-rt-armhf
+
+<span class="p"># Pick up whichever cross-GCC version is installed</span>
+<span class="k">export</span> GCC_ARM_VER=$(ls /usr/lib/gcc-cross/arm-linux-gnueabihf/ | tail -1)
+echo <span class="o">"using cross GCC $GCC_ARM_VER"</span>
+
+cmake -G Ninja ../compiler-rt \
+    <span class="k">-DCMAKE_BUILD_TYPE</span>=Release \
+    <span class="k">-DCMAKE_INSTALL_PREFIX</span>=$LLVM_WORK/toolchain-armhf \
+    <span class="k">-DLLVM_CMAKE_DIR</span>=$LLVM_WORK/stage1/lib/cmake/llvm \
+    <span class="k">-DCMAKE_C_COMPILER</span>=$LLVM_WORK/stage1/bin/clang \
+    <span class="k">-DCMAKE_CXX_COMPILER</span>=$LLVM_WORK/stage1/bin/clang++ \
+    <span class="k">-DCMAKE_ASM_COMPILER</span>=$LLVM_WORK/stage1/bin/clang \
+    <span class="k">-DCMAKE_C_COMPILER_TARGET</span>=<span class="o">"armv7-linux-gnueabihf"</span> \
+    <span class="k">-DCMAKE_CXX_COMPILER_TARGET</span>=<span class="o">"armv7-linux-gnueabihf"</span> \
+    <span class="k">-DCMAKE_ASM_COMPILER_TARGET</span>=<span class="o">"armv7-linux-gnueabihf"</span> \
+    <span class="k">-DCMAKE_C_COMPILER_EXTERNAL_TOOLCHAIN</span>=/usr \
+    <span class="k">-DCMAKE_CXX_COMPILER_EXTERNAL_TOOLCHAIN</span>=/usr \
+    <span class="k">-DCMAKE_SYSROOT</span>=/ \
+    <span class="k">-DCMAKE_C_FLAGS</span>=<span class="o">"--gcc-toolchain=/usr -march=armv7-a -mfloat-abi=hard"</span> \
+    <span class="k">-DCMAKE_CXX_FLAGS</span>=<span class="o">"--gcc-toolchain=/usr -march=armv7-a -mfloat-abi=hard"</span> \
+    <span class="k">-DCMAKE_ASM_FLAGS</span>=<span class="o">"--gcc-toolchain=/usr -march=armv7-a -mfloat-abi=hard"</span> \
+    <span class="k">-DCOMPILER_RT_DEFAULT_TARGET_TRIPLE</span>=<span class="o">"armv7-linux-gnueabihf"</span> \
+    <span class="k">-DCOMPILER_RT_BUILD_BUILTINS</span>=ON \
+    <span class="k">-DCOMPILER_RT_BUILD_SANITIZERS</span>=ON \
+    <span class="k">-DCOMPILER_RT_BUILD_XRAY</span>=OFF
+
+ninja -j$(nproc) install
+
+ls $LLVM_WORK/toolchain-armhf/lib/linux/ | grep builtins</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>using cross GCC 13
+...
+libclang_rt.builtins-armhf.a</pre></div>
+
+  <p>
+    <code>GCC_ARM_VER</code> records the installed cross-GCC version so the
+    recipe does not hard-code <code>13</code>. Check it resolved to a real
+    directory before configuring — an empty value means the
+    <code>gcc-arm-linux-gnueabihf</code> package is missing.
+  </p>
+
+  <h3>7.2  compiler-rt builtins for arm-none-eabi (Cortex-M4) <em>— optional</em></h3>
+
+  <div class="note">
+    <span class="tag">Set this aside on a first build</span>
+    <p>
+      <strong>This step is not required to have a working bare-metal
+      toolchain.</strong> Section 10.2 compiles with clang and links with
+      <code>arm-none-eabi-gcc</code>, which brings its own <code>libgcc</code>
+      — that path works whether or not §7.2 has been done.
+    </p>
+    <p>
+      Do §7.2 only when you want to link bare-metal images with
+      <code>ld.lld</code> and no GNU tools at all, which §10.2.1 demonstrates.
+      Skip it on a first pass and come back to it.
+    </p>
+  </div>
+
+  <div class="note caution">
+    <span class="tag">This section is corrected — Rev 1.1 did not work</span>
+    <p>
+      The v1.1 recipe pointed CMake at <code>../compiler-rt</code> without
+      forcing the target, so <code>COMPILER_RT_DEFAULT_TARGET_TRIPLE</code>
+      stayed at <code>x86_64-unknown-linux-gnu</code>. The build silently
+      produced <em>armhf</em> libraries in <code>build-rt-m4</code> and nothing
+      bare-metal was ever installed. Linking then failed with
+      <em>undefined symbol: __aeabi_ldivmod</em>.
+    </p>
+    <p>
+      Two changes fix it: point CMake at
+      <code>compiler-rt/lib/builtins</code> rather than all of compiler-rt, and
+      set <code>COMPILER_RT_DEFAULT_TARGET_ONLY=ON</code> so the triple is taken
+      from <code>CMAKE_C_COMPILER_TARGET</code>. Do <strong>not</strong> also
+      set <code>COMPILER_RT_DEFAULT_TARGET_TRIPLE</code> — the two conflict and
+      configuration fails.
+    </p>
+  </div>
+
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>cd $LLVM_WORK/llvm-project
+mkdir -p build-rt-m4 &amp;&amp; cd build-rt-m4
+
+cmake -G Ninja ../compiler-rt/lib/builtins \
+    <span class="k">-DCMAKE_BUILD_TYPE</span>=Release \
+    <span class="k">-DCMAKE_INSTALL_PREFIX</span>=$LLVM_WORK/toolchain-none-eabi/lib/clang/17 \
+    <span class="k">-DCMAKE_C_COMPILER</span>=$LLVM_WORK/stage1/bin/clang \
+    <span class="k">-DCMAKE_ASM_COMPILER</span>=$LLVM_WORK/stage1/bin/clang \
+    <span class="k">-DCMAKE_C_COMPILER_TARGET</span>=armv7em-none-eabi \
+    <span class="k">-DCMAKE_ASM_COMPILER_TARGET</span>=armv7em-none-eabi \
+    <span class="k">-DCMAKE_TRY_COMPILE_TARGET_TYPE</span>=STATIC_LIBRARY \
+    <span class="k">-DCMAKE_C_FLAGS</span>=<span class="o">"-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard"</span> \
+    <span class="k">-DCMAKE_ASM_FLAGS</span>=<span class="o">"-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard"</span> \
+    <span class="k">-DCOMPILER_RT_DEFAULT_TARGET_ONLY</span>=ON \
+    <span class="k">-DCOMPILER_RT_BAREMETAL_BUILD</span>=ON \
+    <span class="k">-DCOMPILER_RT_OS_DIR</span>=baremetal \
+    <span class="k">-DCOMPILER_RT_BUILD_BUILTINS</span>=ON \
+    <span class="k">-DCOMPILER_RT_BUILD_SANITIZERS</span>=OFF \
+    <span class="k">-DCOMPILER_RT_BUILD_XRAY</span>=OFF \
+    <span class="k">-DCOMPILER_RT_BUILD_LIBFUZZER</span>=OFF \
+    <span class="k">-DCOMPILER_RT_BUILD_PROFILE</span>=OFF \
+    <span class="k">-DCOMPILER_RT_BUILD_MEMPROF</span>=OFF \
+    <span class="k">-DCOMPILER_RT_BUILD_ORC</span>=OFF \
+    <span class="k">-DLLVM_CONFIG_PATH</span>=$LLVM_WORK/stage1/bin/llvm-config
+
+ninja -j$(nproc) install</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected — last build line</span>
+<pre>[186/186] Linking C static library lib/baremetal/libclang_rt.builtins-armv7em.a</pre></div>
+
+  <div class="step"><span class="id">7.2.1</span><span class="what">Verify the builtins are found by the driver</span></div>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>$LLVM_WORK/toolchain-none-eabi/bin/clang <span class="k">--target</span>=armv7em-none-eabi \
+    <span class="k">-rtlib</span>=compiler-rt <span class="k">-print-libgcc-file-name</span></pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>.../toolchain-none-eabi/lib/clang/17/lib/baremetal/libclang_rt.builtins-armv7em.a</pre></div>
+
+  <p>
+    The printed path must be a file that exists. If it prints a path under
+    <code>lib/linux/</code> instead, <code>COMPILER_RT_OS_DIR</code> was not
+    applied.
+  </p>
+</section>
+
+<!-- ================================================================= -->
+<section id="s8">
+  <div class="sec-head"><span class="sec-num">8</span><h2 class="sec">The uG24 target</h2></div>
+  <div class="sec-rule"></div>
+
+  <p>
+    uG24 is a custom 8-bit processor, not an upstream LLVM back end. The
+    repository already contains the code generator, assembler, disassembler,
+    ELF writer, lld back end, clang target and clang driver.
+    <span class="time">60–120 min</span>
+  </p>
+
+  <div class="step"><span class="id">8.1</span><span class="what">Configure and build</span></div>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>cd $LLVM_WORK/llvm-project
+
+cmake -G Ninja -S llvm -B $LLVM_WORK/build-ug24 \
+    <span class="k">-DCMAKE_BUILD_TYPE</span>=Release \
+    <span class="k">-DLLVM_TARGETS_TO_BUILD</span>=<span class="o">"UG24;AArch64;ARM"</span> \
+    <span class="k">-DLLVM_ENABLE_PROJECTS</span>=<span class="o">"clang;lld"</span> \
+    <span class="k">-DLLVM_ENABLE_RUNTIMES</span>=<span class="o">""</span> \
+    <span class="k">-DCMAKE_C_COMPILER</span>=$LLVM_WORK/stage1/bin/clang \
+    <span class="k">-DCMAKE_CXX_COMPILER</span>=$LLVM_WORK/stage1/bin/clang++ \
+    <span class="k">-DLLVM_PARALLEL_LINK_JOBS</span>=1
+
+cd $LLVM_WORK
+ninja -C build-ug24 -j$(nproc) \
+    clang lld llc llvm-mc llvm-objdump llvm-readobj llvm-nm llvm-ar \
+    FileCheck count not</pre>
+  </div>
+
+  <div class="note">
+    <span class="tag">Do not ask ninja for llvm-lit</span>
+    <p>
+      Do <strong>not</strong> add <code>llvm-lit</code> to that ninja line.
+      It is not a build target in any LLVM 17 tree &mdash;
+      <code>llvm/utils/llvm-lit/CMakeLists.txt</code> only calls
+      <code>configure_file()</code>, so <code>cmake</code> writes
+      <code>build-ug24/bin/llvm-lit</code> at <em>configure</em> time and ninja
+      never sees it. Asking for it gives
+      <code>ninja: error: unknown target 'llvm-lit', did you mean 'llvm-lib'?</code>
+      and stops the build before anything is compiled. The script is already on
+      disk once the <code>cmake</code> above has finished.
+    </p>
+    <p>
+      <code>FileCheck</code>, <code>count</code> and <code>not</code> replace it:
+      those <em>are</em> ninja targets, and <code>llvm-lit</code> needs all three
+      to run the test suites in step 8.5.
+    </p>
+  </div>
+
+  <p>
+    ARM and AArch64 are included so this one build can also run the upstream
+    regression suites, confirming that the shared-file changes
+    (<code>ELF.h</code>, <code>Triple.cpp</code>, <code>lld</code>) broke
+    nothing. This build is used in place, not installed.
+  </p>
+
+  <div class="step"><span class="id">8.2</span><span class="what">Verify the target is registered</span></div>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>$LLVM_WORK/build-ug24/bin/clang --print-targets | grep ug24</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>    ug24       - uG24 8-bit Microprocessor</pre></div>
+
+  <div class="step"><span class="id">8.3</span><span class="what">Build the runtime, simulator and tests</span></div>
+
+  <p>
+    The uG24 compiler on its own cannot link a program: it needs a startup
+    file, a support library, a linker script and a header, none of which exist
+    until they are built <em>with</em> that compiler. <code>ug24-setup.sh</code>
+    from the support bundle does that bootstrapping. It is reproduced in full
+    here so it can be run by hand or recreated if the bundle is lost.
+  </p>
+
+  <div class="cmd"><div class="cmd-label">ug24-setup.sh</div>
+<pre>#!/bin/sh
+# Install the uG24 runtime, simulator and test scripts after the LLVM build.
+#
+# Run this from the top of the working directory (the one containing
+# llvm-project/ and build-ug24/) once `ninja` has produced build-ug24/bin/clang.
+#
+#   ./ug24-setup.sh [build-dir]      default build dir: build-ug24
+#
+set -e
+
+ROOT=$(cd &quot;$(dirname &quot;$0&quot;)&quot; &amp;&amp; pwd)
+BUILD=${1:-build-ug24}
+
+[ -x &quot;$ROOT/$BUILD/bin/clang&quot; ] || {
+    echo &quot;error: $ROOT/$BUILD/bin/clang not found.&quot; &gt;&amp;2
+    echo &quot;Build the uG24 toolchain first - see the handbook, section 6.&quot; &gt;&amp;2
+    exit 1
+}
+
+echo &quot;==&gt; building the uG24 runtime (crt0, libug24, linker script, headers)&quot;
+&quot;$ROOT/ug24-runtime/build-runtime.sh&quot; &quot;$BUILD&quot;
+
+echo &quot;==&gt; building the simulator&quot;
+cc -O2 -Wall -o &quot;$ROOT/ug24-sim/ug24sim&quot; &quot;$ROOT/ug24-sim/ug24sim.c&quot;
+echo &quot;    $ROOT/ug24-sim/ug24sim&quot;
+
+echo &quot;==&gt; running the end-to-end test suite&quot;
+&quot;$ROOT/ug24-tests/run-tests.sh&quot; &quot;$BUILD&quot;
+
+cat &lt;&lt;DONE
+
+uG24 toolchain ready.
+
+  compile and link   $BUILD/bin/clang --target=ug24-unknown-none-eabi -Os hello.c -o hello.elf
+  run                ug24-sim/ug24sim hello.elf --quiet
+  all build stages   ug24-tests/ug24-build.sh hello.c
+DONE</pre>
+  </div>
+
+  <p>It performs three steps in order:</p>
+  <ol>
+    <li><strong>Runtime.</strong> Calls
+      <code>ug24-runtime/build-runtime.sh</code>, which compiles
+      <code>crt0.s</code> with <code>llvm-mc</code> and
+      <code>ug24_builtins.c</code> plus <code>ug24_io.c</code> with the new
+      clang, archives them into <code>libug24.a</code>, and copies those with
+      <code>ug24.ld</code> and <code>include/ug24.h</code> into
+      <code>build-ug24/lib/ug24/</code> — the directory the clang driver
+      searches.</li>
+    <li><strong>Simulator.</strong> Compiles
+      <code>ug24-sim/ug24sim.c</code> with the <em>host</em> compiler, since it
+      runs on x86.</li>
+    <li><strong>Tests.</strong> Runs the 40-case suite: compile, link, execute,
+      compare against expected values.</li>
+  </ol>
+
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>cd $LLVM_WORK
+./ug24-setup.sh</pre>
+  </div>
+
+  <div class="expect"><span class="lbl">expected</span>
+<pre>==&gt; building the uG24 runtime (crt0, libug24, linker script, headers)
+uG24 runtime installed in /home/&lt;user&gt;/llvm-arm-cross/build-ug24/lib/ug24
+==&gt; building the simulator
+    /home/&lt;user&gt;/llvm-arm-cross/ug24-sim/ug24sim
+==&gt; running the end-to-end test suite
+halted after 3962 instructions
+pc=002a sp=fefe ra=0028 psw=0090
+...
+cases run: 40, failures: 0
+PASS
+
+uG24 toolchain ready.
+
+  compile and link   build-ug24/bin/clang --target=ug24-unknown-none-eabi -Os hello.c -o hello.elf
+  run                ug24-sim/ug24sim hello.elf --quiet
+  all build stages   ug24-tests/ug24-build.sh hello.c</pre></div>
+
+  <h3>8.4  What build-runtime.sh installs</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th class="mono">File</th><th>Built from</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">lib/ug24/crt0.o</td><td class="mono">crt0.s</td><td>Sets SP, clears <code>PSW.DP</code>, zeroes <code>.bss</code>, calls <code>main</code></td></tr>
+        <tr><td class="mono">lib/ug24/libug24.a</td><td class="mono">ug24_builtins.c<br>ug24_io.c</td><td>16-bit shifts, multiply, divide, <code>memcpy</code>; console output</td></tr>
+        <tr><td class="mono">lib/ug24/ug24.ld</td><td class="mono">ug24.ld</td><td>Memory layout and the peripheral window</td></tr>
+        <tr><td class="mono">lib/ug24/include/ug24.h</td><td class="mono">include/ug24.h</td><td>Peripheral registers and print functions</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <span class="tag">Why the runtime is built with -ffreestanding -fno-builtin</span>
+    <p>
+      Without those flags the optimiser recognises the shift and
+      <code>memcpy</code> loops inside the helpers and rewrites them as calls to
+      the very functions being defined — producing infinite recursion at run
+      time. <code>build-runtime.sh</code> passes both.
+    </p>
+  </div>
+
+</section>
+
+<!-- ================================================================= -->
+<section id="s9">
+  <div class="sec-head"><span class="sec-num">9</span><h2 class="sec">Wrapper scripts and CMake toolchain files</h2></div>
+  <div class="sec-rule"></div>
+
+  <p>
+    Wrappers encode the triple, sysroot and GCC installation so the toolchain is
+    a drop-in replacement for the GNU cross compiler.
+  </p>
+
+  <h3>9.1  Shell wrappers</h3>
+
+  <div class="note caution">
+    <span class="tag">The heredoc delimiter must be quoted</span>
+    <p>
+      Use <code>&lt;&lt; 'WRAPPER'</code> with quotes. Without them the shell
+      expands <code>$(dirname "$0")</code> and <code>"$@"</code> <em>while
+      writing the file</em>, producing a wrapper that execs <code>/clang</code>
+      and drops all arguments. That is exactly what happened in the previous
+      build.
+    </p>
+  </div>
+
+  <div class="cmd"><div class="cmd-label">shell — armhf</div>
+<pre>TBIN=$LLVM_WORK/toolchain-armhf/bin
+
+cat &gt; $TBIN/arm-linux-gnueabihf-clang &lt;&lt; <span class="o">'WRAPPER'</span>
+#!/bin/sh
+exec "$(dirname "$0")/clang" \
+    --target=armv7-linux-gnueabihf \
+    --sysroot=/usr/arm-linux-gnueabihf \
+    --gcc-toolchain=/usr \
+    -fuse-ld=lld "$@"
+WRAPPER
+chmod +x $TBIN/arm-linux-gnueabihf-clang
+
+cat &gt; $TBIN/arm-linux-gnueabihf-clang++ &lt;&lt; <span class="o">'WRAPPER'</span>
+#!/bin/sh
+exec "$(dirname "$0")/clang++" \
+    --target=armv7-linux-gnueabihf \
+    --sysroot=/usr/arm-linux-gnueabihf \
+    --gcc-toolchain=/usr \
+    -fuse-ld=lld "$@"
+WRAPPER
+chmod +x $TBIN/arm-linux-gnueabihf-clang++</pre>
+  </div>
+
+  <p>
+    Repeat for arm64, substituting <code>toolchain-arm64</code>,
+    <code>aarch64-linux-gnu</code> and
+    <code>/usr/aarch64-linux-gnu</code>.
+  </p>
+
+  <div class="step"><span class="id">9.1.1</span><span class="what">Verify the wrapper</span></div>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>$LLVM_WORK/toolchain-armhf/bin/arm-linux-gnueabihf-clang \
+    -static -o /tmp/w.elf /tmp/hello.c
+qemu-arm /tmp/w.elf</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>Hello from ARM!</pre></div>
+
+  <h3>9.2  CMake toolchain files</h3>
+  <div class="cmd"><div class="cmd-label">toolchain-armhf.cmake</div>
+<pre>set(CMAKE_SYSTEM_NAME      Linux)
+set(CMAKE_SYSTEM_PROCESSOR arm)
+
+set(TRIPLE  armv7-linux-gnueabihf)
+set(LLVMBIN $ENV{LLVM_WORK}/toolchain-armhf/bin)
+
+set(CMAKE_C_COMPILER   ${LLVMBIN}/clang)
+set(CMAKE_CXX_COMPILER ${LLVMBIN}/clang++)
+set(CMAKE_LINKER       ${LLVMBIN}/ld.lld)
+set(CMAKE_AR           ${LLVMBIN}/llvm-ar)
+set(CMAKE_RANLIB       ${LLVMBIN}/llvm-ranlib)
+set(CMAKE_STRIP        ${LLVMBIN}/llvm-strip)
+
+set(CMAKE_C_COMPILER_TARGET   ${TRIPLE})
+set(CMAKE_CXX_COMPILER_TARGET ${TRIPLE})
+set(CMAKE_SYSROOT             /usr/arm-linux-gnueabihf)
+
+set(CMAKE_C_FLAGS_INIT   "--gcc-toolchain=/usr")
+set(CMAKE_CXX_FLAGS_INIT "--gcc-toolchain=/usr")
+
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)</pre>
+  </div>
+
+  <p>
+    <code>toolchain-ug24.cmake</code> comes with the support bundle and needs no
+    editing; point it at the build directory if it is not the default:
+  </p>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>cmake -B build -DCMAKE_TOOLCHAIN_FILE=$LLVM_WORK/toolchain-ug24.cmake \
+      -DUG24_TOOLCHAIN=$LLVM_WORK/build-ug24</pre>
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<section id="s10">
+  <div class="sec-head"><span class="sec-num">10</span><h2 class="sec">Verification</h2></div>
+  <div class="sec-rule"></div>
+
+  <h3>10.1  Hosted test program (ARM32 and ARM64)</h3>
+  <div class="cmd"><div class="cmd-label">/tmp/hello.c</div>
+<pre>#include &lt;stdio.h&gt;
+int main(void) {
+    printf("Hello from ARM!\n");
+    return 0;
+}</pre>
+  </div>
+
+  <div class="step"><span class="id">10.1.1</span><span class="what">ARM32 — compile, inspect, run</span></div>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>$LLVM_WORK/toolchain-armhf/bin/clang \
+    <span class="k">--target</span>=armv7-linux-gnueabihf \
+    <span class="k">--sysroot</span>=$SYSROOT_ARMHF \
+    <span class="k">--gcc-toolchain</span>=/usr \
+    -fuse-ld=lld -static \
+    -o /tmp/hello-arm /tmp/hello.c
+
+file /tmp/hello-arm
+readelf -h /tmp/hello-arm | grep -E <span class="o">'Class|Machine'</span>
+qemu-arm /tmp/hello-arm</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>/tmp/hello-arm: ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV),
+                statically linked, not stripped
+  Class:   ELF32
+  Machine: ARM
+Hello from ARM!</pre></div>
+
+  <div class="step"><span class="id">10.1.2</span><span class="what">ARM64 — compile, inspect, run</span></div>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>$LLVM_WORK/toolchain-arm64/bin/clang \
+    <span class="k">--target</span>=aarch64-linux-gnu \
+    <span class="k">--sysroot</span>=$SYSROOT_ARM64 \
+    <span class="k">--gcc-toolchain</span>=/usr \
+    -fuse-ld=lld -static \
+    -o /tmp/hello-arm64 /tmp/hello.c
+
+readelf -h /tmp/hello-arm64 | grep -E <span class="o">'Class|Machine'</span>
+qemu-aarch64 /tmp/hello-arm64</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>  Class:   ELF64
+  Machine: AArch64
+Hello from ARM!</pre></div>
+
+  <h3>10.2  Bare-metal test (arm-none-eabi)</h3>
+  <p>
+    The same <code>hello.c</code> works, because newlib provides
+    <code>printf</code> over semihosting. Compile with clang, link with
+    <code>arm-none-eabi-gcc</code>, which supplies newlib and the semihosting
+    startup files.
+  </p>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>$LLVM_WORK/toolchain-none-eabi/bin/clang \
+    <span class="k">--target</span>=arm-none-eabi -mcpu=cortex-m4 -mthumb -O2 \
+    -isystem /usr/lib/arm-none-eabi/include \
+    -c /tmp/hello.c -o /tmp/hello-m4.o
+
+arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb /tmp/hello-m4.o \
+    -o /tmp/hello-m4.elf --specs=rdimon.specs
+
+readelf -h /tmp/hello-m4.elf | grep -E <span class="o">'Class|Machine'</span>
+
+qemu-system-arm -M mps2-an386 -cpu cortex-m4 -nographic \
+    -semihosting -kernel /tmp/hello-m4.elf</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>  Class:   ELF32
+  Machine: ARM
+Hello from ARM!</pre></div>
+
+  <div class="step"><span class="id">10.2.1</span><span class="what">Freestanding link, LLVM only</span></div>
+  <p>
+    Proof that §7.2 worked: a program needing a 64-bit divide, linked with
+    <code>ld.lld</code> and compiler-rt, with no GNU tools involved.
+  </p>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>cat &gt; /tmp/free.c &lt;&lt; <span class="o">'EOF'</span>
+long long divide(long long a, long long b) { return a / b; }
+void _start(void) { volatile long long r = divide(1000000LL, 7LL); (void)r; for(;;); }
+EOF
+
+RT=$($LLVM_WORK/toolchain-none-eabi/bin/clang --target=armv7em-none-eabi \
+        -rtlib=compiler-rt -print-libgcc-file-name)
+
+$LLVM_WORK/toolchain-none-eabi/bin/clang <span class="k">--target</span>=armv7em-none-eabi \
+    -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard \
+    -ffreestanding -nostdlib -fuse-ld=lld \
+    /tmp/free.c $RT -o /tmp/free.elf
+
+file /tmp/free.elf</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>/tmp/free.elf: ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV),
+               statically linked, not stripped</pre></div>
+
+  <h3>10.3  uG24 test</h3>
+  <p>
+    <code>hello.c</code> with <code>printf</code> <strong>will not compile for
+    uG24</strong> — there is no C library and no OS. Output goes through
+    <code>ug24.h</code> and a memory-mapped UART the simulator models.
+  </p>
+  <div class="cmd"><div class="cmd-label">/tmp/hello-ug24.c</div>
+<pre>#include &lt;ug24.h&gt;
+int main(void) {
+    ug24_println("Hello ug24");
+    return 0;
+}</pre>
+  </div>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre>$LLVM_WORK/build-ug24/bin/clang <span class="k">--target</span>=ug24-unknown-none-eabi -Os \
+    /tmp/hello-ug24.c -o /tmp/hello-ug24.elf
+
+$LLVM_WORK/build-ug24/bin/llvm-readobj --file-headers /tmp/hello-ug24.elf \
+    | grep -E <span class="o">'Format|Machine'</span>
+
+$LLVM_WORK/ug24-sim/ug24sim /tmp/hello-ug24.elf <span class="k">--quiet</span></pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>Format: elf32-ug24
+  Machine: 0x9240
+Hello ug24</pre></div>
+
+  <div class="note">
+    <span class="tag">Use llvm-readobj, not readelf, for uG24</span>
+    <p>
+      System <code>readelf</code> reports <code>Machine: &lt;unknown&gt;:
+      0x9240</code>. That is expected — <code>EM_UG24 = 0x9240</code> is a
+      private machine number binutils has never seen. The LLVM tools in
+      <code>build-ug24/bin</code> know it.
+    </p>
+  </div>
+
+  <h3>10.4  Regression suites</h3>
+  <div class="cmd"><div class="cmd-label">shell</div>
+<pre><span class="p"># uG24: 40 execution cases</span>
+$LLVM_WORK/ug24-tests/run-tests.sh
+
+<span class="p"># uG24: LLVM regression tests</span>
+$LLVM_WORK/build-ug24/bin/llvm-lit -s \
+    $LLVM_WORK/llvm-project/llvm/test/MC/UG24 \
+    $LLVM_WORK/llvm-project/llvm/test/CodeGen/UG24
+
+<span class="p"># upstream ARM and AArch64, proving the shared changes are safe</span>
+ninja -C $LLVM_WORK/build-ug24 check-llvm-codegen-arm check-llvm-codegen-aarch64</pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>cases run: 40, failures: 0
+PASS
+
+  Passed: 7
+
+  Passed: 1451      <span class="p"># CodeGen/ARM</span>
+  Passed: 2806      <span class="p"># CodeGen/AArch64</span></pre></div>
+</section>
+
+<!-- ================================================================= -->
+<section id="s11">
+  <div class="sec-head"><span class="sec-num">11</span><h2 class="sec">Troubleshooting</h2></div>
+  <div class="sec-rule"></div>
+
+  <p>Every entry was encountered during a real build.</p>
+
+  <h3>cannot open crtbeginS.o · unable to find library -lgcc</h3>
+  <p>
+    A cross link draws from two places. The <strong>sysroot</strong> supplies
+    <code>crt1.o</code>, <code>crti.o</code>, <code>crtn.o</code> and libc; the
+    <strong>GCC installation</strong> supplies <code>crtbeginS.o</code>,
+    <code>crtendS.o</code> and <code>libgcc</code>. Clang does not locate
+    Debian's <code>/usr/lib/gcc-cross</code> layout on its own, so it emits
+    those as bare filenames with no path.
+  </p>
+  <div class="cmd"><div class="cmd-label">fix</div>
+<pre>clang ... <span class="k">--gcc-toolchain</span>=/usr
+
+<span class="p"># confirm it took effect</span>
+clang ... -v 2&gt;&amp;1 | grep <span class="o">"Selected GCC installation"</span></pre>
+  </div>
+  <div class="expect"><span class="lbl">expected</span>
+<pre>Selected GCC installation: /usr/lib/gcc-cross/arm-linux-gnueabihf/13</pre></div>
+
+  <h3>qemu-arm: Could not open '/lib/ld-linux-armhf.so.3'</h3>
+  <p>
+    The link succeeded — this is a runtime failure. The binary is dynamically
+    linked and qemu is looking for the ARM loader in the x86 root.
+  </p>
+  <div class="cmd"><div class="cmd-label">fix — either</div>
+<pre>clang ... -static
+qemu-arm -L /usr/arm-linux-gnueabihf ./hello-arm</pre>
+  </div>
+
+  <h3>instruction requires: VFP2 (building compiler-rt)</h3>
+  <p>
+    compiler-rt was added to <code>LLVM_ENABLE_RUNTIMES</code> for the bare-metal
+    build, so the sub-build selected <code>-mfloat-abi=soft</code>. Remove it
+    from that build and follow §7.2 instead.
+  </p>
+
+  <h3>undefined symbol: __aeabi_ldivmod (bare metal)</h3>
+  <p>
+    The bare-metal builtins were not built or not installed where clang looks.
+    Check with <code>-print-libgcc-file-name</code> (§7.2.1); if the printed
+    path does not exist, redo §7.2.
+  </p>
+
+  <h3>stdio.h not found</h3>
+  <p>
+    <code>--sysroot</code> is unset or empty. An unset shell variable expands to
+    <code>--sysroot=</code>, which clang silently ignores. Check with
+    <code>ls $SYSROOT_ARMHF/include/stdio.h</code>.
+  </p>
+
+  <h3>The wrapper script execs /clang</h3>
+  <p>
+    The heredoc delimiter was unquoted, so <code>$(dirname "$0")</code> was
+    expanded at write time. Recreate it with
+    <code>&lt;&lt; 'WRAPPER'</code> — see §9.1.
+  </p>
+
+  <h3>The build is killed part-way through</h3>
+  <p>
+    Out of memory during linking; confirm with
+    <code>dmesg | grep -i oom</code>. Keep
+    <code>-DLLVM_PARALLEL_LINK_JOBS=1</code> and lower <code>ninja -j</code>.
+  </p>
+
+  <h3>ninja rebuilds hundreds of targets for no reason</h3>
+  <p>
+    A system library update touched a timestamp, so ninja considers
+    <code>llvm-min-tblgen</code> stale and cascades a relink. Harmless, about a
+    minute. The build is done when ninja says <em>no work to do</em>.
+  </p>
+
+  <h3>undefined symbol __mulsi3 / __adddf3 (uG24)</h3>
+  <p>
+    The program uses <code>long</code>, <code>float</code> or
+    <code>double</code>. Those uG24 runtime helpers are not implemented. Use
+    <code>char</code>, <code>short</code> or <code>int</code>.
+  </p>
+</section>
+
+<!-- ================================================================= -->
+<section id="s12">
+  <div class="sec-head"><span class="sec-num">12</span><h2 class="sec">Build completion checklist</h2></div>
+  <div class="sec-rule"></div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th class="mono">#</th><th>Check</th><th>Expected</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">1</td><td>Dependencies installed</td><td class="mono">cmake ≥ 3.20, ninja ≥ 1.10</td></tr>
+        <tr><td class="mono">2</td><td>Environment exported</td><td><code>echo $LLVM_WORK</code> non-empty</td></tr>
+        <tr><td class="mono">3</td><td>Repo cloned</td><td class="mono">cb00f5815</td></tr>
+        <tr><td class="mono">4</td><td>uG24 back end present</td><td class="mono">29 files</td></tr>
+        <tr><td class="mono">5</td><td>Support bundle unpacked</td><td><code>ug24-runtime ug24-sim ug24-tests</code></td></tr>
+        <tr><td class="mono">6</td><td>armhf sysroot valid</td><td><code>stdio.h</code>, <code>libc.so</code> present</td></tr>
+        <tr><td class="mono">7</td><td>arm64 sysroot valid</td><td><code>stdio.h</code>, <code>libc.so</code> present</td></tr>
+        <tr><td class="mono">8</td><td>bare-metal sysroot copied</td><td class="mono">libc.a, libg.a</td></tr>
+        <tr><td class="mono">9</td><td>Stage 1 built</td><td class="mono">X86 ARM AArch64</td></tr>
+        <tr><td class="mono">10</td><td>armhf toolchain built</td><td class="mono">armv7-unknown-linux-gnueabihf</td></tr>
+        <tr><td class="mono">11</td><td>armhf LLDB present</td><td class="mono">lldb version 17.0.6</td></tr>
+        <tr><td class="mono">12</td><td>arm64 toolchain built</td><td class="mono">aarch64-unknown-linux-gnu</td></tr>
+        <tr><td class="mono">13</td><td>none-eabi toolchain built</td><td class="mono">arm-none-unknown-eabi</td></tr>
+        <tr><td class="mono">14</td><td>compiler-rt armhf</td><td class="mono">libclang_rt.builtins-armhf.a</td></tr>
+        <tr><td class="mono">15</td><td>compiler-rt bare metal</td><td class="mono">libclang_rt.builtins-armv7em.a</td></tr>
+        <tr><td class="mono">16</td><td>uG24 compiler built</td><td><code>ug24</code> in <code>--print-targets</code></td></tr>
+        <tr><td class="mono">17</td><td><code>ug24-setup.sh</code> passes</td><td class="mono">cases run: 40, failures: 0</td></tr>
+        <tr><td class="mono">18</td><td>Wrappers work</td><td class="mono">Hello from ARM!</td></tr>
+        <tr><td class="mono">19</td><td>armhf runs under qemu</td><td class="mono">Hello from ARM!</td></tr>
+        <tr><td class="mono">20</td><td>arm64 runs under qemu</td><td class="mono">Hello from ARM!</td></tr>
+        <tr><td class="mono">21</td><td>bare metal runs under qemu</td><td class="mono">Hello from ARM!</td></tr>
+        <tr><td class="mono">22</td><td>uG24 runs on the simulator</td><td class="mono">Hello ug24</td></tr>
+        <tr><td class="mono">23</td><td>uG24 lit tests</td><td class="mono">Passed: 7</td></tr>
+        <tr><td class="mono">24</td><td>Upstream ARM unaffected</td><td class="mono">4,257 passed</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Changes from Rev 1.1</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>§</th><th>Change</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">4.3</td><td>Warning added: the debootstrap sysroot failed silently on the previous build. Verify it or use Option A.</td></tr>
+        <tr><td class="mono">6.1.3</td><td>Expected triple corrected to the normalised four-field form <code>armv7-unknown-linux-gnueabihf</code>.</td></tr>
+        <tr><td class="mono">7.2</td><td><strong>Rewritten.</strong> The v1.1 recipe silently built armhf libraries. Now points at <code>compiler-rt/lib/builtins</code> with <code>COMPILER_RT_DEFAULT_TARGET_ONLY=ON</code>.</td></tr>
+        <tr><td class="mono">8</td><td>New — the uG24 target.</td></tr>
+        <tr><td class="mono">9.1</td><td>Warning added: the heredoc delimiter must be quoted, or the wrapper is written broken.</td></tr>
+        <tr><td class="mono">10</td><td><code>--gcc-toolchain=/usr</code> added to every hosted link; without it the link fails.</td></tr>
+        <tr><td class="mono">11</td><td>Troubleshooting extended with every failure hit during validation.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  Rev 2.0 · supersedes v1.1 · LLVM 17.0.6 · every command in this document was
+  executed and its output captured on the reference machine. Companion
+  documents in <code>docs/</code>: <code>uG24-machine-description.md</code>,
+  <code>uG24-assumptions.md</code>,
+  <code>uG24_Specification_Queries_ANSWERED.md</code>.
+</footer>
+
+</main>
+</div>
+</div>

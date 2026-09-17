@@ -1,0 +1,10 @@
+sizes: 1 2 4 2
+values: AA BEEF DEADBEEF
+limits: -32768 32767 65535 4294967295
+add: 3345 33456789
+signed: 1
+array: 1111 2222 3333
+struct: 12 3456 789ABCDE
+union: 12345678
+bits: 1 0 2
+offset: 0 2 4

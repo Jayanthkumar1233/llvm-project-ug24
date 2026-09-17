@@ -1,0 +1,31 @@
+storage: 1 2 3 4 5
+block: 100
+if: B
+switch 0: zero low
+switch 1: low
+switch 2: two
+switch 3: other
+loops: 10 3 10 16 4
+goto: 3
+arith: 17 7 60 2 2
+bitwise: 4 13 9 65523 48 3
+logical: 1 1 0
+compare: 1 0 1 0 0 1
+incdec: 10 12 11 11 10
+compound: 5
+ternary: 12
+comma: 17
+array: 9 5 8
+pointer: 0 16 4 0
+struct: 0 3 7 10
+union: BEEF BE EF
+bitfield: 1 5
+enum: 0 6 blue
+call: 5040 15 77
+mutual: 1 0
+varargs: 60 5
+struct arg: 10 5
+fnptr: 42 -21
+string: uG24-ok-9 9
+heap: zzzzzzz
+macro: 36 uG24 v2 1

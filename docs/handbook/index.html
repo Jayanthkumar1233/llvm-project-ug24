@@ -1,0 +1,984 @@
+<title>uG24 Toolchain Handbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&display=swap">
+
+<style>
+  /* ---- Light palette: the complete token set ------------------------- */
+  :root {
+    --ground:   #FBFCFD;
+    --surface:  #F0F3F8;
+    --sunken:   #E7ECF3;
+    --ink:      #101720;
+    --muted:    #58657A;
+    --faint:    #7C889A;
+    --rule:     #D2DAE6;
+    --rule-soft:#E3E9F1;
+
+    --copper:   #B0522B;   /* accent: oxide / solder */
+    --copper-bg:#F6EAE3;
+    --trace:    #1D4E7C;   /* structure: blueprint blue */
+    --trace-bg: #E4EDF6;
+    --good:     #2F6B45;
+    --good-bg:  #E4F0E8;
+    --warn-bg:  #F7F0DC;
+    --warn-ink: #7A5A16;
+
+    --code-bg:  #131A24;
+    --code-ink: #DCE4EE;
+    --code-dim: #7E8CA0;
+
+    --shadow: 0 1px 2px rgba(16,23,32,.06), 0 8px 24px -16px rgba(16,23,32,.28);
+  }
+
+  /* ---- Dark: redefine tokens only ----------------------------------- */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:   #0C1119;
+      --surface:  #141B25;
+      --sunken:   #1B2430;
+      --ink:      #E3E9F1;
+      --muted:    #9DAABC;
+      --faint:    #768395;
+      --rule:     #26303D;
+      --rule-soft:#1D2732;
+
+      --copper:   #E08A5E;
+      --copper-bg:#2A1B13;
+      --trace:    #74AEE0;
+      --trace-bg: #12222F;
+      --good:     #7BBF95;
+      --good-bg:  #12241A;
+      --warn-bg:  #2A2312;
+      --warn-ink: #D6BC77;
+
+      --code-bg:  #070B11;
+      --code-ink: #D6DFEA;
+      --code-dim: #6C7A8E;
+
+      --shadow: 0 1px 2px rgba(0,0,0,.5), 0 10px 30px -18px rgba(0,0,0,.9);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:   #0C1119;
+    --surface:  #141B25;
+    --sunken:   #1B2430;
+    --ink:      #E3E9F1;
+    --muted:    #9DAABC;
+    --faint:    #768395;
+    --rule:     #26303D;
+    --rule-soft:#1D2732;
+
+    --copper:   #E08A5E;
+    --copper-bg:#2A1B13;
+    --trace:    #74AEE0;
+    --trace-bg: #12222F;
+    --good:     #7BBF95;
+    --good-bg:  #12241A;
+    --warn-bg:  #2A2312;
+    --warn-ink: #D6BC77;
+
+    --code-bg:  #070B11;
+    --code-ink: #D6DFEA;
+    --code-dim: #6C7A8E;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.5), 0 10px 30px -18px rgba(0,0,0,.9);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 28px 96px;
+  }
+
+  /* ---- Masthead ------------------------------------------------------ */
+  header.masthead {
+    border-bottom: 2px solid var(--ink);
+    padding: 56px 0 22px;
+    margin-bottom: 8px;
+  }
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--copper);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: clamp(34px, 5.4vw, 55px);
+    font-weight: 700;
+    letter-spacing: -.028em;
+    line-height: 1.04;
+    margin: 0 0 16px;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 19px;
+    color: var(--muted);
+    max-width: 62ch;
+    margin: 0;
+  }
+  .standfirst em { color: var(--ink); font-style: italic; }
+
+  /* ---- Fact strip ---------------------------------------------------- */
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 34px 0 8px;
+  }
+  .fact { background: var(--surface); padding: 14px 16px; }
+  .fact dt {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--faint); margin: 0 0 5px;
+  }
+  .fact dd {
+    margin: 0;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 15px; font-weight: 600; letter-spacing: -.01em;
+    font-variant-numeric: tabular-nums;
+  }
+  .fact dd.ok { color: var(--good); }
+
+  /* ---- Two-column shell ---------------------------------------------- */
+  .shell { display: block; }
+  @media (min-width: 1000px) {
+    .shell {
+      display: grid;
+      grid-template-columns: 210px minmax(0, 1fr);
+      gap: 56px;
+      align-items: start;
+    }
+    nav.toc { position: sticky; top: 28px; }
+  }
+
+  nav.toc { padding-top: 46px; }
+  nav.toc h2 {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--faint); font-weight: 500;
+    margin: 0 0 12px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule);
+  }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  nav.toc a {
+    display: grid; grid-template-columns: 22px 1fr; gap: 6px;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 13.5px; line-height: 1.35;
+    color: var(--muted); text-decoration: none;
+    padding: 5px 6px 5px 0; border-radius: 3px;
+  }
+  nav.toc a span.n {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums;
+  }
+  nav.toc a:hover { color: var(--copper); }
+  nav.toc a:hover span.n { color: var(--copper); }
+  nav.toc a:focus-visible { outline: 2px solid var(--copper); outline-offset: 2px; }
+
+  /* ---- Sections ------------------------------------------------------ */
+  main { padding-top: 46px; min-width: 0; }
+  section { margin-bottom: 62px; scroll-margin-top: 24px; }
+
+  .sec-head { display: flex; align-items: baseline; gap: 13px; margin-bottom: 6px; }
+  .sec-num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px; font-weight: 500; color: var(--copper);
+    letter-spacing: .06em; padding-top: 2px;
+  }
+  h2.sec {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: clamp(23px, 3vw, 30px); font-weight: 650;
+    letter-spacing: -.021em; line-height: 1.15;
+    margin: 0; text-wrap: balance;
+  }
+  .sec-rule { height: 1px; background: var(--rule); margin: 14px 0 24px; }
+
+  h3 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 17.5px; font-weight: 650; letter-spacing: -.012em;
+    margin: 34px 0 10px; text-wrap: balance;
+  }
+  h4 {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px; font-weight: 600; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--faint);
+    margin: 26px 0 9px;
+  }
+
+  p { margin: 0 0 15px; max-width: 68ch; }
+  main ul, main ol.body-list { margin: 0 0 16px; padding-left: 21px; max-width: 66ch; }
+  main li { margin-bottom: 7px; }
+  strong { font-weight: 600; }
+  a { color: var(--trace); text-underline-offset: 2px; }
+
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .855em;
+    background: var(--sunken);
+    padding: .1em .34em;
+    border-radius: 3px;
+    color: var(--ink);
+  }
+
+  /* ---- Command blocks ------------------------------------------------ */
+  .cmd {
+    background: var(--code-bg);
+    border-radius: 5px;
+    margin: 0 0 16px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .cmd-label {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--code-dim);
+    padding: 9px 15px 0;
+  }
+  .cmd pre {
+    margin: 0;
+    padding: 10px 15px 15px;
+    overflow-x: auto;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13.5px;
+    line-height: 1.62;
+    color: var(--code-ink);
+    tab-size: 4;
+  }
+  .cmd pre .p { color: var(--code-dim); }      /* prompt / comment */
+  .cmd pre .o { color: #E0A46E; }              /* output */
+  .cmd pre .k { color: #85B8E8; }              /* flag */
+
+  /* ---- Tables -------------------------------------------------------- */
+  .tw { overflow-x: auto; margin: 0 0 18px; border: 1px solid var(--rule); border-radius: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td {
+    text-align: left; padding: 9px 14px;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+  }
+  thead th {
+    background: var(--surface);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--faint); font-weight: 600;
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td code { background: none; padding: 0; color: var(--trace); }
+  td.mono, th.mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ---- Callouts ------------------------------------------------------ */
+  .note {
+    border-left: 3px solid var(--copper);
+    background: var(--copper-bg);
+    padding: 14px 18px;
+    margin: 0 0 18px;
+    border-radius: 0 4px 4px 0;
+    max-width: 68ch;
+  }
+  .note p:last-child { margin-bottom: 0; }
+  .note .tag {
+    display: block;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--copper); margin-bottom: 6px; font-weight: 600;
+  }
+  .note.caution { border-left-color: var(--warn-ink); background: var(--warn-bg); }
+  .note.caution .tag { color: var(--warn-ink); }
+
+  /* ---- Pipeline diagram ---------------------------------------------- */
+  .diagram { margin: 4px 0 26px; overflow-x: auto; }
+  .diagram svg { display: block; min-width: 640px; width: 100%; height: auto; }
+
+  /* ---- Status pills --------------------------------------------------- */
+  .pill {
+    display: inline-block;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 10px; font-weight: 600;
+    white-space: nowrap;
+  }
+  .pill.done { background: var(--good-bg); color: var(--good); }
+  .pill.gap  { background: var(--warn-bg); color: var(--warn-ink); }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    margin-top: 20px; padding-top: 20px;
+    font-size: 13.5px; color: var(--faint);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">LLVM 17.0.6 · ug24-unknown-none-eabi</p>
+    <h1>uG24 Toolchain Handbook</h1>
+    <p class="standfirst">
+      How a complete C cross-compiler, assembler, linker, runtime and simulator
+      were built for the uG24 8-bit microprocessor — and how to compile and run
+      a program with them.
+    </p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Host</dt><dd>x86-64 Linux</dd></div>
+      <div class="fact"><dt>Target</dt><dd>uG24, 8-bit</dd></div>
+      <div class="fact"><dt>Address space</dt><dd>64 KB</dd></div>
+      <div class="fact"><dt>Instructions</dt><dd>51 encodings</dd></div>
+      <div class="fact"><dt>Backend</dt><dd>5,354 lines</dd></div>
+      <div class="fact"><dt>Tests</dt><dd class="ok">47 passing</dd></div>
+    </dl>
+  </header>
+
+  <div class="shell">
+
+    <nav class="toc">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#s1"><span class="n">01</span><span>What exists</span></a></li>
+        <li><a href="#s2"><span class="n">02</span><span>How it was built</span></a></li>
+        <li><a href="#s3"><span class="n">03</span><span>Decisions the spec forced</span></a></li>
+        <li><a href="#s4"><span class="n">04</span><span>Building the toolchain</span></a></li>
+        <li><a href="#s5"><span class="n">05</span><span>Running a file</span></a></li>
+        <li><a href="#s6"><span class="n">06</span><span>Inspecting output</span></a></li>
+        <li><a href="#s7"><span class="n">07</span><span>Reference</span></a></li>
+        <li><a href="#s8"><span class="n">08</span><span>Verification</span></a></li>
+        <li><a href="#s9"><span class="n">09</span><span>Known limits</span></a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+      <!-- =========================================================== -->
+      <section id="s1">
+        <div class="sec-head"><span class="sec-num">01</span><h2 class="sec">What exists</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          The uG24 is a custom 8-bit RISC core with a 16-bit address space,
+          16 general-purpose registers and 16-bit fixed-width instructions.
+          Nothing existed for it, so every stage below was written: there is no
+          upstream compiler, linker or emulator to fall back on.
+        </p>
+
+        <div class="diagram">
+          <svg viewBox="0 0 900 168" xmlns="http://www.w3.org/2000/svg" role="img"
+               aria-label="Pipeline: C source through clang, LLVM UG24 backend, assembler, lld, to an ELF executable run by the simulator.">
+            <defs>
+              <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5"
+                      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--faint)"/>
+              </marker>
+            </defs>
+            <g font-family="IBM Plex Sans, sans-serif" font-size="12.5">
+              <!-- boxes -->
+              <g>
+                <rect x="2"   y="44" width="112" height="52" rx="4" fill="var(--surface)" stroke="var(--rule)"/>
+                <text x="58"  y="66" text-anchor="middle" fill="var(--ink)" font-weight="600">hello.c</text>
+                <text x="58"  y="83" text-anchor="middle" fill="var(--faint)" font-size="11">C source</text>
+              </g>
+              <g>
+                <rect x="158" y="44" width="132" height="52" rx="4" fill="var(--trace-bg)" stroke="var(--trace)"/>
+                <text x="224" y="66" text-anchor="middle" fill="var(--ink)" font-weight="600">clang</text>
+                <text x="224" y="83" text-anchor="middle" fill="var(--faint)" font-size="11">front end · driver</text>
+              </g>
+              <g>
+                <rect x="334" y="30" width="150" height="80" rx="4" fill="var(--copper-bg)" stroke="var(--copper)"/>
+                <text x="409" y="55" text-anchor="middle" fill="var(--ink)" font-weight="600">UG24 backend</text>
+                <text x="409" y="72" text-anchor="middle" fill="var(--faint)" font-size="11">ISel · frames · MC</text>
+                <text x="409" y="88" text-anchor="middle" fill="var(--faint)" font-size="11">encoder · relocs</text>
+              </g>
+              <g>
+                <rect x="528" y="44" width="122" height="52" rx="4" fill="var(--trace-bg)" stroke="var(--trace)"/>
+                <text x="589" y="66" text-anchor="middle" fill="var(--ink)" font-weight="600">ld.lld</text>
+                <text x="589" y="83" text-anchor="middle" fill="var(--faint)" font-size="11">crt0 · libug24</text>
+              </g>
+              <g>
+                <rect x="694" y="44" width="112" height="52" rx="4" fill="var(--surface)" stroke="var(--rule)"/>
+                <text x="750" y="66" text-anchor="middle" fill="var(--ink)" font-weight="600">hello.elf</text>
+                <text x="750" y="83" text-anchor="middle" fill="var(--faint)" font-size="11">uG24 image</text>
+              </g>
+              <g>
+                <rect x="694" y="0" width="112" height="0" fill="none"/>
+                <rect x="838" y="44" width="60" height="52" rx="4" fill="var(--good-bg)" stroke="var(--good)"/>
+                <text x="868" y="68" text-anchor="middle" fill="var(--good)" font-weight="600" font-size="11.5">sim</text>
+                <text x="868" y="83" text-anchor="middle" fill="var(--faint)" font-size="10">run</text>
+              </g>
+
+              <!-- arrows -->
+              <g stroke="var(--faint)" stroke-width="1.3" marker-end="url(#ar)" fill="none">
+                <path d="M 118 70 L 152 70"/>
+                <path d="M 294 70 L 328 70"/>
+                <path d="M 488 70 L 522 70"/>
+                <path d="M 654 70 L 688 70"/>
+                <path d="M 810 70 L 832 70"/>
+              </g>
+
+              <!-- caption rail -->
+              <text x="409" y="136" text-anchor="middle" fill="var(--faint)" font-size="11"
+                    font-family="IBM Plex Mono, monospace" letter-spacing="0.06em">
+                ONE COMMAND DRIVES EVERYTHING LEFT OF THE ELF
+              </text>
+            </g>
+          </svg>
+        </div>
+
+        <div class="tw">
+          <table>
+            <thead>
+              <tr><th>Layer</th><th>What it does</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>Clang target</strong></td><td>uG24 type sizes, alignment, register names, predefined macros</td><td><span class="pill done">done</span></td></tr>
+              <tr><td><strong>Clang driver</strong></td><td>Bare-metal toolchain: finds <code>crt0.o</code>, <code>libug24.a</code>, the linker script and headers</td><td><span class="pill done">done</span></td></tr>
+              <tr><td><strong>Code generator</strong></td><td>Instruction selection, register allocation, stack frames, calls</td><td><span class="pill done">done</span></td></tr>
+              <tr><td><strong>Assembler</strong></td><td>Parses uG24 assembly; all 51 encodings verified against the ISA sheet</td><td><span class="pill done">done</span></td></tr>
+              <tr><td><strong>Disassembler</strong></td><td>Round-trips byte-identically through the assembler</td><td><span class="pill done">done</span></td></tr>
+              <tr><td><strong>Object writer</strong></td><td>ELF with <code>EM_UG24</code> and seven relocation types</td><td><span class="pill done">done</span></td></tr>
+              <tr><td><strong>Linker</strong></td><td>lld backend, memory layout, symbol resolution</td><td><span class="pill done">done</span></td></tr>
+              <tr><td><strong>Runtime</strong></td><td>Startup, 16-bit maths helpers, console output</td><td><span class="pill done">done</span></td></tr>
+              <tr><td><strong>Simulator</strong></td><td>Full instruction set, memory-mapped UART, tracing</td><td><span class="pill done">done</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- =========================================================== -->
+      <section id="s2">
+        <div class="sec-head"><span class="sec-num">02</span><h2 class="sec">How it was built</h2></div>
+        <div class="sec-rule"></div>
+
+        <h3>The instruction set came from the spreadsheet, not the PDF</h3>
+        <p>
+          Two source documents were supplied. <code>uG24081616uP_spec.pdf</code>
+          is a hardware engineering specification — clocks, resets, bus
+          interfaces, TCM configuration. It contains no opcode tables.
+          <code>Copy&nbsp;of&nbsp;uG24xx1616uP_ISA.xlsx</code> does, and it is
+          the authoritative source for every encoding in the backend.
+        </p>
+        <p>
+          The spreadsheet's <em>uG24081616uP_ISA</em> sheet gives, for each
+          instruction, its mnemonic, operation, length and the bit-field layout
+          across positions 15 down to 0. The <em>uG24081616uP_Registers</em>
+          sheet gives the register file and the PSW bit assignments. Both were
+          transcribed field by field into TableGen.
+        </p>
+
+        <div class="note">
+          <span class="tag">Worth knowing</span>
+          <p>
+            An earlier draft of the backend had most opcodes wrong —
+            <code>NOP</code> and <code>WFI</code> swapped, <code>RET</code>
+            encoded as <code>NOP</code>, branches using the wrong two low bits,
+            <code>LJA</code>'s target address never encoded at all, and
+            <code>XORI</code> missing entirely. Rebuilding the machine
+            description directly from the spreadsheet fixed all of it. Every
+            encoding is now pinned by a regression test.
+          </p>
+        </div>
+
+        <h3>Six formats carry the whole instruction set</h3>
+        <p>
+          The low bits of each halfword select the encoding class, which is what
+          makes a compact decoder possible:
+        </p>
+
+        <div class="tw">
+          <table>
+            <thead>
+              <tr><th class="mono">Selector</th><th>Format</th><th>Instructions</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="mono">Inst{0} = 1</td><td>I — immediate</td><td>LD, MVI, ST, ANDI, ORI, XORI, ADI, SBI</td></tr>
+              <tr><td class="mono">Inst{1:0} = 10</td><td>B — branch</td><td>12 conditional branches, JR, LJR, JI, LJI</td></tr>
+              <tr><td class="mono">Inst{3:0} = 0000</td><td>P — implied</td><td>SWAP, MUL, DIV, CMP, JA, LJA, machine control</td></tr>
+              <tr><td class="mono">Inst{3:0} = 0100</td><td>S — stack/move</td><td>MOV, PUSH, POP and their SFR forms</td></tr>
+              <tr><td class="mono">Inst{3:2} = 10</td><td>A — arithmetic</td><td>ADD, ADC, SUB, SBB, INC, DEC</td></tr>
+              <tr><td class="mono">Inst{3:2} = 11</td><td>L — logic/shift</td><td>AND, OR, XOR, NOT, LSL, LSR, RSL, RSR, ASR, CLRF, INVF</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Making an 8-bit ALU compile C</h3>
+        <p>
+          C requires <code>int</code> to be at least 16 bits, but the uG24 ALU is
+          8 bits wide. Three mechanisms bridge that gap:
+        </p>
+        <ul>
+          <li><strong>Byte-pair arithmetic.</strong> Every 16-bit add, subtract
+            or bitwise operation is selected as a pseudo instruction and split
+            after register allocation into two byte operations, with
+            <code>ADC</code>/<code>SBB</code> carrying between halves.</li>
+          <li><strong>Constant shift expansion.</strong> A 16-bit shift by a
+            constant becomes byte shifts plus an <code>OR</code> — never a
+            function call. Only variable shift amounts reach the runtime.</li>
+          <li><strong>Two-stage comparison.</strong> A 16-bit compare tests the
+            high bytes, then the low bytes when the high bytes match. Signed
+            comparisons flip both sign bits first and use the unsigned ordering,
+            which is exact and avoids depending on an ambiguity in the spec.</li>
+        </ul>
+
+        <h3>Two registers are reserved</h3>
+        <p>
+          <code>R11</code> is the expansion temporary: <code>ADC</code> and
+          <code>SBB</code> take a register operand, so adding a 16-bit constant
+          needs somewhere to put its high byte. <code>R15:R14</code>
+          (<code>DPTR0</code>) is the memory base register, because
+          <code>LD</code> and <code>ST</code> read their base address from
+          <code>DPTR0</code> implicitly rather than from an encoded operand.
+          Everything else is allocatable.
+        </p>
+        <p>
+          The instruction set only <em>names</em> three register pairs, because
+          only three fit its 3-bit extended-register field. But that field is
+          used by just four instruction forms; ordinary 16-bit arithmetic works
+          on any adjacent pair. The compiler therefore treats all eight pairs as
+          16-bit registers and restricts only those four forms — without this,
+          two usable 16-bit registers would mean near-constant spilling.
+        </p>
+
+        <h3>Where the code lives</h3>
+        <div class="tw">
+          <table>
+            <thead><tr><th>Path</th><th>Contents</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">llvm/lib/Target/UG24/</td><td>The backend — 40 files, 5,354 lines</td></tr>
+              <tr><td class="mono">lld/ELF/Arch/UG24.cpp</td><td>Relocation processing for the linker</td></tr>
+              <tr><td class="mono">clang/lib/Basic/Targets/UG24.*</td><td>Type sizes, data layout, register names</td></tr>
+              <tr><td class="mono">clang/lib/Driver/ToolChains/UG24.*</td><td>Bare-metal driver: startup file, library, linker script</td></tr>
+              <tr><td class="mono">llvm/BinaryFormat/ELF*</td><td><code>EM_UG24</code> and the <code>R_UG24_*</code> relocations</td></tr>
+              <tr><td class="mono">ug24-runtime/</td><td><code>crt0.s</code>, maths helpers, console I/O, linker script</td></tr>
+              <tr><td class="mono">ug24-sim/ug24sim.c</td><td>Instruction set simulator — 618 lines</td></tr>
+              <tr><td class="mono">ug24-tests/</td><td>End-to-end tests and helper scripts</td></tr>
+              <tr><td class="mono">docs/</td><td>Machine description, assumptions, build guide</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- =========================================================== -->
+      <section id="s3">
+        <div class="sec-head"><span class="sec-num">03</span><h2 class="sec">Decisions the spec forced</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          The source documents leave four things genuinely undetermined. Each was
+          resolved by an explicit assumption, isolated to as few places as
+          possible so it is cheap to change. <strong>These need confirmation from
+          whoever owns the hardware.</strong>
+        </p>
+
+        <div class="tw">
+          <table>
+            <thead><tr><th>Ambiguity</th><th>Assumption made</th><th>Change it in</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><strong>Branch displacement units.</strong> Branches are written <code>PC ← PC + 1 + i10</code>, but instructions are 2 bytes.</td>
+                <td>The field is a signed count of <em>instruction words</em> from the following instruction: <code class="mono">target = branch + 2 + i10×2</code>. This is the only reading consistent with <code>LJA</code>'s <code>RA ← PC + 2</code>.</td>
+                <td class="mono">UG24AsmBackend.cpp<br>lld Arch/UG24.cpp<br>ug24sim.c</td>
+              </tr>
+              <tr>
+                <td><strong>CMP signedness.</strong> The sheet says <code>PSW.LT = (Rs1 &lt; Rs2)</code> without saying signed or unsigned.</td>
+                <td>Unsigned, with <code>PSW.Cy</code> also receiving the borrow. The compiler never depends on this: signed comparisons flip both sign bits first, so if the hardware turns out to compare signed, the flip is merely redundant.</td>
+                <td class="mono">UG24ISelLowering.cpp<br><span style="color:var(--faint)">(translateCC)</span></td>
+              </tr>
+              <tr>
+                <td><strong>Stack direction.</strong> <code>PUSH</code> stores then decrements; <code>POP</code> loads then increments. As written these are not inverses.</td>
+                <td>Full-descending: decrement then store, load then increment, so a push/pop pair round-trips. Multi-byte pushes are little-endian.</td>
+                <td class="mono">ug24sim.c<br>UG24FrameLowering.cpp</td>
+              </tr>
+              <tr>
+                <td><strong>Extended register width.</strong> Written as <code>100_0</code> in some tables and <code>100</code> in others.</td>
+                <td>Three bits, holding the GPR index shifted right by one. Resolved from the encoding diagrams, which leave exactly three bits for the field.</td>
+                <td class="mono">UG24RegisterInfo.td</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          One further gap is not an ambiguity but an absence: the specification
+          defines no C ABI. The calling convention below was invented and is
+          documented in <code>docs/uG24-assumptions.md</code>.
+        </p>
+      </section>
+
+      <!-- =========================================================== -->
+      <section id="s4">
+        <div class="sec-head"><span class="sec-num">04</span><h2 class="sec">Building the toolchain</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          The toolchain is already built in <code>build-ug24/</code>. These steps
+          are for rebuilding from scratch on another machine.
+        </p>
+
+        <h4>Configure</h4>
+        <div class="cmd">
+          <div class="cmd-label">shell</div>
+<pre>cd ~/llvm-arm-cross
+cmake -G Ninja -S llvm-project/llvm -B build-ug24 \
+  <span class="k">-DCMAKE_BUILD_TYPE</span>=Release \
+  <span class="k">-DLLVM_TARGETS_TO_BUILD</span>=<span class="o">"UG24;AArch64;ARM"</span> \
+  <span class="k">-DLLVM_ENABLE_PROJECTS</span>=<span class="o">"clang;lld"</span></pre>
+        </div>
+
+        <h4>Compile</h4>
+        <div class="cmd">
+          <div class="cmd-label">shell</div>
+<pre>ninja -C build-ug24 clang lld llc llvm-mc llvm-objdump llvm-readobj llvm-nm llvm-ar</pre>
+        </div>
+
+        <h4>Runtime and simulator</h4>
+        <div class="cmd">
+          <div class="cmd-label">shell</div>
+<pre>./ug24-runtime/build-runtime.sh build-ug24
+cc -O2 -o ug24-sim/ug24sim ug24-sim/ug24sim.c</pre>
+        </div>
+
+        <p>
+          <code>build-runtime.sh</code> compiles the startup file and helper
+          library with the compiler that was just built, then installs
+          <code>crt0.o</code>, <code>libug24.a</code>, <code>ug24.ld</code> and
+          <code>include/ug24.h</code> into <code>build-ug24/lib/ug24/</code> —
+          which is where the clang driver looks for them.
+        </p>
+
+        <div class="note caution">
+          <span class="tag">If ninja rebuilds unexpectedly</span>
+          <p>
+            A system library update can touch a timestamp that makes ninja
+            consider <code>llvm-min-tblgen</code> stale, cascading a relink of
+            roughly eighty targets. This is harmless and takes about a minute.
+            The build is complete when <code>ninja</code> reports
+            <em>no work to do</em>.
+          </p>
+        </div>
+      </section>
+
+      <!-- =========================================================== -->
+      <section id="s5">
+        <div class="sec-head"><span class="sec-num">05</span><h2 class="sec">Running a file</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          There is no operating system on this target and no standard library.
+          Printing works through a memory-mapped UART that the simulator models,
+          declared in <code>ug24.h</code>.
+        </p>
+
+        <h4>hello.c</h4>
+        <div class="cmd">
+          <div class="cmd-label">c</div>
+<pre><span class="k">#include</span> <span class="o">&lt;ug24.h&gt;</span>
+
+int main(void) {
+    ug24_println(<span class="o">"Hello ug24"</span>);
+    return 0;
+}</pre>
+        </div>
+
+        <h4>Compile, link and run</h4>
+        <div class="cmd">
+          <div class="cmd-label">shell</div>
+<pre>~/llvm-arm-cross/build-ug24/bin/clang <span class="k">--target</span>=ug24-unknown-none-eabi -Os hello.c -o hello.elf
+~/llvm-arm-cross/ug24-sim/ug24sim hello.elf <span class="k">--quiet</span>
+
+<span class="o">Hello ug24</span></pre>
+        </div>
+
+        <p>
+          That single clang invocation runs the front end, the uG24 code
+          generator, the integrated assembler and the linker, pulling in the
+          startup file, the runtime library and the memory layout automatically.
+        </p>
+
+        <h3>A fuller example</h3>
+        <p>
+          The helpers cover decimal and hexadecimal output, which is usually
+          enough to check a computation without a debugger:
+        </p>
+
+        <div class="cmd">
+          <div class="cmd-label">c</div>
+<pre><span class="k">#include</span> <span class="o">&lt;ug24.h&gt;</span>
+
+int main(void) {
+    ug24_println(<span class="o">"Hello ug24"</span>);
+
+    ug24_puts(<span class="o">"  8-bit multiply 12 * 11 = "</span>);
+    ug24_put_u16((unsigned char)(12 * 11));
+    ug24_putchar(<span class="o">'\n'</span>);
+
+    ug24_puts(<span class="o">"  16-bit sum 1..100    = "</span>);
+    unsigned short sum = 0;
+    for (unsigned short i = 1; i &lt;= 100; i++)
+        sum = (unsigned short)(sum + i);
+    ug24_put_u16(sum);
+    ug24_putchar(<span class="o">'\n'</span>);
+
+    ug24_puts(<span class="o">"  hex of 48879         = 0x"</span>);
+    ug24_put_hex16(48879);
+    ug24_putchar(<span class="o">'\n'</span>);
+    return 0;
+}</pre>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-label">output</div>
+<pre><span class="o">Hello ug24
+  8-bit multiply 12 * 11 = 132
+  16-bit sum 1..100    = 5050
+  hex of 48879         = 0xbeef</span></pre>
+        </div>
+
+        <h3>Console functions</h3>
+        <div class="tw">
+          <table>
+            <thead><tr><th>Function</th><th>Writes</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">ug24_putchar(c)</td><td>One character</td></tr>
+              <tr><td class="mono">ug24_puts(s)</td><td>A string</td></tr>
+              <tr><td class="mono">ug24_println(s)</td><td>A string and a newline</td></tr>
+              <tr><td class="mono">ug24_put_u16(v)</td><td>Unsigned decimal</td></tr>
+              <tr><td class="mono">ug24_put_s16(v)</td><td>Signed decimal</td></tr>
+              <tr><td class="mono">ug24_put_hex8(v)</td><td>Two hex digits</td></tr>
+              <tr><td class="mono">ug24_put_hex16(v)</td><td>Four hex digits</td></tr>
+              <tr><td class="mono">ug24_exit(status)</td><td>Halts; becomes the process exit status</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- =========================================================== -->
+      <section id="s6">
+        <div class="sec-head"><span class="sec-num">06</span><h2 class="sec">Inspecting output</h2></div>
+        <div class="sec-rule"></div>
+
+        <h3>Without a UART</h3>
+        <p>
+          A program that computes rather than prints can leave its results in
+          <strong>global</strong> variables — locals disappear when a function
+          returns — and <code>--dump</code> writes the whole 64&nbsp;KB memory to
+          <code>ug24-memory.bin</code> for inspection.
+        </p>
+
+        <div class="cmd">
+          <div class="cmd-label">shell</div>
+<pre>~/llvm-arm-cross/ug24-tests/ug24-run.sh mytest.c results total
+
+<span class="o">halted after 289 instructions
+return value: r0=230  w=14
+  results      @0x000000e2  00010409
+  total        @0x000000e6  0e00</span></pre>
+        </div>
+
+        <p>
+          <code>ug24-run.sh</code> compiles, links, runs and then looks up each
+          named global in the symbol table and prints its bytes. Note that
+          multi-byte values are <strong>little-endian</strong>:
+          <code>0e00</code> is 14, not 3584. A byte-sized return value appears in
+          <code>r0</code>; a 16-bit one appears in <code>w</code>.
+        </p>
+
+        <h3>Seeing the generated code</h3>
+        <div class="cmd">
+          <div class="cmd-label">shell</div>
+<pre><span class="p"># assembly, before assembling</span>
+clang <span class="k">--target</span>=ug24-unknown-none-eabi -Os -S hello.c -o -
+
+<span class="p"># disassembly of the linked image</span>
+llvm-objdump -d <span class="k">--triple</span>=ug24-unknown-none-eabi hello.elf
+
+<span class="p"># headers, sections and relocations</span>
+llvm-readobj <span class="k">--file-headers</span> <span class="k">--relocations</span> hello.o</pre>
+        </div>
+
+        <h3>Simulator options</h3>
+        <div class="tw">
+          <table>
+            <thead><tr><th>Option</th><th>Effect</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">--quiet</td><td>Print only what the program itself writes</td></tr>
+              <tr><td class="mono">--dump</td><td>Write memory to <code>ug24-memory.bin</code> on exit</td></tr>
+              <tr><td class="mono">--trace</td><td>Print every instruction as it executes, to stderr</td></tr>
+              <tr><td class="mono">--max N</td><td>Stop after N instructions (default 20,000,000)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="note caution">
+          <span class="tag">If it never halts</span>
+          <p>
+            <em>stopped after 20000000 instructions without halting</em> means an
+            infinite loop. Run again with <code>--max 100000 --trace</code> and
+            look at the tail of the trace to find where it spins.
+          </p>
+        </div>
+      </section>
+
+      <!-- =========================================================== -->
+      <section id="s7">
+        <div class="sec-head"><span class="sec-num">07</span><h2 class="sec">Reference</h2></div>
+        <div class="sec-rule"></div>
+
+        <h3>Register file</h3>
+        <div class="tw">
+          <table>
+            <thead><tr><th class="mono">Register</th><th>Width</th><th>Role</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">R0–R3</td><td>8</td><td>Arguments and return value; caller-saved</td></tr>
+              <tr><td class="mono">R4–R7, R10</td><td>8</td><td>Callee-saved</td></tr>
+              <tr><td class="mono">R8, R9 (W)</td><td>8 / 16</td><td>16-bit return value; <code>MUL</code>/<code>DIV</code> result</td></tr>
+              <tr><td class="mono">R11</td><td>8</td><td><strong>Reserved</strong> — expansion temporary</td></tr>
+              <tr><td class="mono">R12, R13 (DPTR1)</td><td>8 / 16</td><td>Second 16-bit argument</td></tr>
+              <tr><td class="mono">R14, R15 (DPTR0)</td><td>8 / 16</td><td><strong>Reserved</strong> — memory base register</td></tr>
+              <tr><td class="mono">PC, RA, PSW, SP</td><td>16</td><td>Special function registers</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Calling convention</h3>
+        <ul>
+          <li>8-bit arguments in <code>R0</code>–<code>R3</code>, then the stack.</li>
+          <li>16-bit arguments in <code>W</code>, then <code>DPTR1</code>, then the stack.</li>
+          <li>Returns: a byte in <code>R0</code>, sixteen bits in <code>W</code>.</li>
+          <li><code>RA</code> holds the return address and is clobbered by the
+            next call, so any non-leaf function pushes and pops it.</li>
+        </ul>
+
+        <h3>Memory map</h3>
+        <div class="tw">
+          <table>
+            <thead><tr><th class="mono">Range</th><th>Contents</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">0x0000 – …</td><td><code>.text</code>, then <code>.rodata</code>, <code>.data</code>, <code>.bss</code></td></tr>
+              <tr><td class="mono">… – 0xFEFE</td><td>Stack, growing downwards from <code>__stack_top</code></td></tr>
+              <tr><td class="mono">0xFF00</td><td><code>UG24_UART_TX</code> — write a byte to print it</td></tr>
+              <tr><td class="mono">0xFF01</td><td><code>UG24_UART_STATUS</code> — bit 0 set when ready</td></tr>
+              <tr><td class="mono">0xFF02</td><td><code>UG24_SIM_EXIT</code> — write to halt with that status</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The peripheral window is a simulator convention, not hardware. Change
+          it in <code>ug24.h</code>, <code>ug24.ld</code> and
+          <code>ug24sim.c</code> together to match a real SoC.
+        </p>
+
+        <h3>Relocations</h3>
+        <div class="tw">
+          <table>
+            <thead><tr><th class="mono">Type</th><th>Applies to</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">R_UG24_ABS16</td><td>The address halfword of <code>JA</code> / <code>LJA</code></td></tr>
+              <tr><td class="mono">R_UG24_PCREL10</td><td>Branch displacement, in instruction words</td></tr>
+              <tr><td class="mono">R_UG24_LO8 / HI8</td><td>One byte of an address in an <code>MVI</code></td></tr>
+              <tr><td class="mono">R_UG24_8 / 16 / 32</td><td>Plain data</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- =========================================================== -->
+      <section id="s8">
+        <div class="sec-head"><span class="sec-num">08</span><h2 class="sec">Verification</h2></div>
+        <div class="sec-rule"></div>
+
+        <div class="cmd">
+          <div class="cmd-label">shell</div>
+<pre><span class="p"># LLVM regression tests for the uG24 target</span>
+build-ug24/bin/llvm-lit -sv llvm-project/llvm/test/MC/UG24 llvm-project/llvm/test/CodeGen/UG24
+
+<span class="p"># compile, link and execute 40 cases on the simulator</span>
+./ug24-tests/run-tests.sh</pre>
+        </div>
+
+        <div class="tw">
+          <table>
+            <thead><tr><th>Check</th><th>Covers</th><th class="mono">Result</th></tr></thead>
+            <tbody>
+              <tr><td>Encoding tests</td><td>All 51 instructions against the ISA spreadsheet</td><td class="mono">7 pass</td></tr>
+              <tr><td>Round-trip</td><td>Disassembly reassembles to identical bytes</td><td class="mono">51/51</td></tr>
+              <tr><td>Execution suite</td><td>Arithmetic, comparisons, loops, calls, arrays, pointers, structs, recursion, stack arguments, static initialisation</td><td class="mono">40 pass</td></tr>
+              <tr><td>Optimisation levels</td><td>The suite at <code>-O0</code>, <code>-O1</code>, <code>-O2</code>, <code>-Os</code>, <code>-O3</code></td><td class="mono">all pass</td></tr>
+              <tr><td>Host targets</td><td>ARM and AArch64 unaffected by the shared-file changes</td><td class="mono">7,003 pass</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          The execution suite is the important one: it compiles C, links it,
+          runs it on the simulator and checks the computed values, so a fault
+          anywhere in the chain shows up as a wrong answer rather than passing
+          silently.
+        </p>
+      </section>
+
+      <!-- =========================================================== -->
+      <section id="s9">
+        <div class="sec-head"><span class="sec-num">09</span><h2 class="sec">Known limits</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          These are deliberate scope boundaries, not defects. Each fails loudly
+          rather than producing wrong code.
+        </p>
+
+        <div class="tw">
+          <table>
+            <thead><tr><th>Not supported</th><th>What happens</th></tr></thead>
+            <tbody>
+              <tr><td><code>float</code>, <code>double</code>, <code>long</code> arithmetic</td><td>Link error naming the missing helper, e.g. <code>__mulsi3</code></td></tr>
+              <tr><td>Signed and 16-bit division</td><td>Works, but through software helpers — the hardware <code>DIV</code> is 8-bit unsigned only</td></tr>
+              <tr><td>Variable-length <code>alloca</code></td><td>Rejected during lowering</td></tr>
+              <tr><td>Debug information</td><td>No DWARF is emitted; debug with <code>--trace</code></td></tr>
+              <tr><td>Computed goto, jump tables</td><td>Expanded into compare-and-branch chains; <code>JI</code>/<code>LJI</code> assemble but are not selected</td></tr>
+              <tr><td>Interrupt handlers</td><td>No attribute or vector table support yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          The largest single piece of remaining work is a 32-bit and
+          floating-point helper library, which would remove the first row
+          entirely. It can be written in C and compiled with this toolchain, the
+          way <code>ug24_builtins.c</code> already is.
+        </p>
+      </section>
+
+      <footer>
+        Built on LLVM 17.0.6 · target triple <code>ug24-unknown-none-eabi</code> ·
+        ELF machine <code>0x9240</code>. Companion documents:
+        <code>docs/uG24-machine-description.md</code> for the full instruction
+        encodings, <code>docs/uG24-assumptions.md</code> for the reasoning behind
+        every decision above.
+      </footer>
+
+    </main>
+  </div>
+</div>

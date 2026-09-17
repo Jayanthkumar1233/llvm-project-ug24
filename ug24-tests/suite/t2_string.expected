@@ -1,0 +1,11 @@
+memset: AAAAA
+memcpy: AAAAA
+memcmp: 0
+strcpy: hello
+strncpy: world
+strcat: hello uG24
+strlen: 10
+strcmp: -1
+strncmp: 0
+strchr: found
+memmove: 0101234567
