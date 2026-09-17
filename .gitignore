@@ -1,0 +1,32 @@
+# The LLVM checkout is its own repository.
+/llvm-project/
+
+# Build trees and installed toolchains -- all reproducible from source.
+/build-ug24/
+/build-*/
+/stage1/
+/toolchain-arm64/
+/toolchain-armhf/
+/toolchain-none-eabi/
+/sysroot-armhf/
+/sysroot-none-eabi/
+
+# Per-run artefacts from compiling or simulating a test.
+*.elf
+*.o
+*.dis
+*.ll
+*.s
+*.bin
+*.actual
+ug24-memory.bin
+
+# Keep the hand-written assembly that is source, not output.
+!ug24-runtime/crt0.s
+
+# Snapshot archives -- the sources they contain are versioned here already.
+*.zip
+*.tar.gz
+
+# The simulator binary is built by ug24-setup.sh.
+/ug24-sim/ug24sim

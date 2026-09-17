@@ -1,0 +1,618 @@
+//===-- ug24sim.c - Instruction set simulator for the uG24 ---------------===//
+//
+// Loads a statically linked uG24 ELF executable into a flat 64 KB memory and
+// interprets it.  The decode tables follow "Copy of uG24xx1616uP_ISA.xlsx"
+// exactly; where the specification is ambiguous the choice made here is
+// called out in a comment and matches what the compiler assumes.
+//
+// Build:  cc -O2 -o ug24sim ug24sim.c
+// Run:    ./ug24sim program.elf [--trace] [--max N]
+//
+//===----------------------------------------------------------------------===//
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdarg.h>
+
+#define MEM_SIZE 0x10000
+
+// Memory-mapped I/O.  A real uG24 SoC decodes peripherals somewhere in the
+// 64 KB space; the simulator models the smallest useful set at the top of
+// memory, just below the stack.  ug24-runtime/include/ug24.h and the MEMORY
+// block in ug24.ld must agree with these addresses.
+#define UART_TX     0xFF00u  // write: emit the byte on the console
+#define UART_STATUS 0xFF01u  // read: bit 0 set when the transmitter is ready
+#define SIM_EXIT    0xFF02u  // write: stop the simulator with this exit code
+#define MMIO_BASE   0xFF00u
+#define MMIO_END    0xFF0Fu
+
+// PSW bit positions, from the uG24 register spreadsheet.
+enum {
+    PSW_CY = 0,
+    PSW_DZ = 2,
+    PSW_Z  = 3,
+    PSW_EQ = 4,
+    PSW_LT = 5,
+    PSW_GT = 6,
+    PSW_S  = 7,
+    PSW_DP = 8,
+};
+
+typedef struct {
+    uint8_t  mem[MEM_SIZE];
+    uint8_t  r[16];
+    uint16_t pc, ra, sp, psw;
+    uint64_t cycles;
+    int      halted;
+    int      exit_code;
+    int      trace;
+} Core;
+
+// All data accesses go through these so that the peripheral window behaves
+// differently from plain memory.  Instruction fetch does not: code cannot be
+// executed out of the MMIO region.
+static uint8_t mem_read(Core *c, uint16_t addr) {
+    if (addr >= MMIO_BASE && addr <= MMIO_END) {
+        switch (addr) {
+        case UART_STATUS: return 1;   // always ready to accept a byte
+        default:          return 0;
+        }
+    }
+    return c->mem[addr];
+}
+
+static void mem_write(Core *c, uint16_t addr, uint8_t value) {
+    if (addr >= MMIO_BASE && addr <= MMIO_END) {
+        switch (addr) {
+        case UART_TX:
+            fputc(value, stdout);
+            fflush(stdout);
+            break;
+        case SIM_EXIT:
+            c->exit_code = value;
+            c->halted = 1;
+            break;
+        default:
+            break;
+        }
+        return;
+    }
+    c->mem[addr] = value;
+}
+
+static uint16_t rd16(Core *c, uint16_t a) {
+    return (uint16_t)(c->mem[a] | (c->mem[(uint16_t)(a + 1)] << 8));
+}
+
+// The three extended register pairs, indexed by their 3-bit code.
+static uint16_t x_get(Core *c, unsigned code) {
+    unsigned lo = code * 2;
+    return (uint16_t)(c->r[lo] | (c->r[lo + 1] << 8));
+}
+static void x_set(Core *c, unsigned code, uint16_t v) {
+    unsigned lo = code * 2;
+    c->r[lo] = (uint8_t)v;
+    c->r[lo + 1] = (uint8_t)(v >> 8);
+}
+
+static const char *x_name(unsigned code) {
+    switch (code) {
+    case 4: return "w";
+    case 6: return "dptr1";
+    case 7: return "dptr0";
+    default: return "x?";
+    }
+}
+
+static void set_bit(Core *c, int bit, int value) {
+    if (value)
+        c->psw |= (uint16_t)(1u << bit);
+    else
+        c->psw &= (uint16_t)~(1u << bit);
+}
+static int get_bit(Core *c, int bit) { return (c->psw >> bit) & 1; }
+
+// Flags common to the arithmetic and logical instructions.
+static void set_nz(Core *c, uint8_t result) {
+    set_bit(c, PSW_Z, result == 0);
+    set_bit(c, PSW_S, (result & 0x80) != 0);
+}
+
+// The base address used by LD and ST: PSW.DP selects DPTR1 over DPTR0.
+static uint16_t data_base(Core *c) {
+    return get_bit(c, PSW_DP) ? x_get(c, 6) : x_get(c, 7);
+}
+
+//===----------------------------------------------------------------------===//
+// ELF loading
+//===----------------------------------------------------------------------===//
+
+#define EM_UG24 0x9240
+
+static int load_elf(Core *c, const char *path, uint16_t *entry) {
+    FILE *f = fopen(path, "rb");
+    if (!f) { perror(path); return -1; }
+
+    unsigned char hdr[52];
+    if (fread(hdr, 1, sizeof hdr, f) != sizeof hdr) {
+        fprintf(stderr, "%s: too short to be an ELF file\n", path);
+        fclose(f); return -1;
+    }
+    if (memcmp(hdr, "\177ELF", 4) != 0 || hdr[4] != 1 || hdr[5] != 1) {
+        fprintf(stderr, "%s: not a 32-bit little-endian ELF file\n", path);
+        fclose(f); return -1;
+    }
+
+    unsigned machine = hdr[18] | (hdr[19] << 8);
+    if (machine != EM_UG24)
+        fprintf(stderr, "warning: e_machine is 0x%x, expected 0x%x (uG24)\n",
+                machine, EM_UG24);
+
+    uint32_t e_entry  = hdr[24] | (hdr[25]<<8) | (hdr[26]<<16) | ((uint32_t)hdr[27]<<24);
+    uint32_t e_phoff  = hdr[28] | (hdr[29]<<8) | (hdr[30]<<16) | ((uint32_t)hdr[31]<<24);
+    unsigned e_phentsize = hdr[42] | (hdr[43] << 8);
+    unsigned e_phnum     = hdr[44] | (hdr[45] << 8);
+
+    for (unsigned i = 0; i < e_phnum; i++) {
+        unsigned char ph[32];
+        if (fseek(f, (long)(e_phoff + (uint32_t)i * e_phentsize), SEEK_SET) != 0) break;
+        if (fread(ph, 1, sizeof ph, f) != sizeof ph) break;
+
+        uint32_t p_type   = ph[0] | (ph[1]<<8) | (ph[2]<<16) | ((uint32_t)ph[3]<<24);
+        uint32_t p_offset = ph[4] | (ph[5]<<8) | (ph[6]<<16) | ((uint32_t)ph[7]<<24);
+        uint32_t p_paddr  = ph[12]| (ph[13]<<8)| (ph[14]<<16)| ((uint32_t)ph[15]<<24);
+        uint32_t p_filesz = ph[16]| (ph[17]<<8)| (ph[18]<<16)| ((uint32_t)ph[19]<<24);
+        uint32_t p_memsz  = ph[20]| (ph[21]<<8)| (ph[22]<<16)| ((uint32_t)ph[23]<<24);
+
+        if (p_type != 1 /* PT_LOAD */) continue;
+        if (p_paddr + p_memsz > MEM_SIZE) {
+            fprintf(stderr, "segment at 0x%x does not fit in 64 KB\n", p_paddr);
+            fclose(f); return -1;
+        }
+        if (fseek(f, (long)p_offset, SEEK_SET) != 0) break;
+        if (p_filesz && fread(c->mem + p_paddr, 1, p_filesz, f) != p_filesz) {
+            fprintf(stderr, "short read loading segment at 0x%x\n", p_paddr);
+            fclose(f); return -1;
+        }
+        memset(c->mem + p_paddr + p_filesz, 0, p_memsz - p_filesz);
+    }
+
+    fclose(f);
+    *entry = (uint16_t)e_entry;
+    return 0;
+}
+
+//===----------------------------------------------------------------------===//
+// Execution
+//===----------------------------------------------------------------------===//
+
+static void trace(Core *c, uint16_t pc, const char *fmt, ...) {
+    if (!c->trace) return;
+    va_list ap;
+    fprintf(stderr, "%04x: ", pc);
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+}
+
+static void step(Core *c) {
+    uint16_t pc = c->pc;
+    uint16_t insn = rd16(c, pc);
+    c->pc = (uint16_t)(pc + 2);
+    c->cycles++;
+
+    // Format I: Inst{0} == 1.
+    if (insn & 1) {
+        unsigned func = (insn >> 1) & 0x7;
+        if (func == 0x2) { // ST Rs, i8 - the only form with the register high
+            unsigned rs = (insn >> 12) & 0xf;
+            uint8_t disp = (uint8_t)((insn >> 4) & 0xff);
+            uint16_t addr = (uint16_t)(data_base(c) + disp);
+            mem_write(c, addr, c->r[rs]);
+            trace(c, pc, "st r%u, [%u] -> [%04x]=%02x", rs, disp, addr, c->r[rs]);
+            return;
+        }
+
+        uint8_t imm = (uint8_t)(insn >> 8);
+        unsigned rd = (insn >> 4) & 0xf;
+        unsigned res;
+        switch (func) {
+        case 0x0: { // LD Rd, i8
+            uint16_t addr = (uint16_t)(data_base(c) + imm);
+            c->r[rd] = mem_read(c, addr);
+            trace(c, pc, "ld r%u, [%u] <- [%04x]=%02x", rd, imm, addr, c->r[rd]);
+            return;
+        }
+        case 0x1: // MVI
+            c->r[rd] = imm;
+            trace(c, pc, "mvi r%u, %u", rd, imm);
+            return;
+        case 0x3: // ANDI
+            c->r[rd] &= imm; set_nz(c, c->r[rd]);
+            trace(c, pc, "andi r%u, %u -> %02x", rd, imm, c->r[rd]);
+            return;
+        case 0x4: // ORI
+            c->r[rd] |= imm; set_nz(c, c->r[rd]);
+            trace(c, pc, "ori r%u, %u -> %02x", rd, imm, c->r[rd]);
+            return;
+        case 0x5: // XORI
+            c->r[rd] ^= imm; set_nz(c, c->r[rd]);
+            trace(c, pc, "xori r%u, %u -> %02x", rd, imm, c->r[rd]);
+            return;
+        case 0x6: // ADI
+            res = (unsigned)c->r[rd] + imm;
+            set_bit(c, PSW_CY, res > 0xff);
+            c->r[rd] = (uint8_t)res; set_nz(c, c->r[rd]);
+            trace(c, pc, "adi r%u, %u -> %02x", rd, imm, c->r[rd]);
+            return;
+        case 0x7: // SBI
+            res = (unsigned)c->r[rd] - imm;
+            set_bit(c, PSW_CY, c->r[rd] < imm);
+            c->r[rd] = (uint8_t)res; set_nz(c, c->r[rd]);
+            trace(c, pc, "sbi r%u, %u -> %02x", rd, imm, c->r[rd]);
+            return;
+        default:
+            break;
+        }
+    }
+
+    // Format B: Inst{1-0} == 10.
+    if ((insn & 3) == 2) {
+        unsigned func = (insn >> 2) & 0xf;
+
+        if (func == 0xe || func == 0xf) { // JI / LJI: PC <- {Xs, i7}
+            unsigned imm7 = (insn >> 9) & 0x7f;
+            unsigned xs = (insn >> 6) & 0x7;
+            uint16_t target = (uint16_t)((x_get(c, xs) & 0xff80) | imm7);
+            if (func == 0xf) c->ra = c->pc;
+            trace(c, pc, "%s %s, %u -> %04x", func == 0xe ? "ji" : "lji",
+                  x_name(xs), imm7, target);
+            c->pc = target;
+            return;
+        }
+
+        // The encoded field is a signed count of instruction words applied to
+        // the address of the following instruction.
+        int32_t words = (int32_t)((insn >> 6) & 0x3ff);
+        if (words & 0x200) words -= 0x400;
+        uint16_t target = (uint16_t)(c->pc + words * 2);
+
+        int taken;
+        const char *name;
+        switch (func) {
+        case 0x0: taken = get_bit(c, PSW_EQ);  name = "beq"; break;
+        case 0x1: taken = !get_bit(c, PSW_EQ); name = "bne"; break;
+        case 0x2: taken = get_bit(c, PSW_LT);  name = "blt"; break;
+        case 0x3: taken = get_bit(c, PSW_LT) || get_bit(c, PSW_EQ); name = "ble"; break;
+        case 0x4: taken = get_bit(c, PSW_GT);  name = "bgt"; break;
+        case 0x5: taken = get_bit(c, PSW_GT) || get_bit(c, PSW_EQ); name = "bge"; break;
+        case 0x6: taken = get_bit(c, PSW_Z);   name = "bz";  break;
+        case 0x7: taken = !get_bit(c, PSW_Z);  name = "bnz"; break;
+        case 0x8: taken = get_bit(c, PSW_CY);  name = "bc";  break;
+        case 0x9: taken = !get_bit(c, PSW_CY); name = "bnc"; break;
+        case 0xa: taken = !get_bit(c, PSW_S);  name = "bps"; break;
+        case 0xb: taken = get_bit(c, PSW_S);   name = "bns"; break;
+        case 0xc: taken = 1; name = "jr"; break;
+        case 0xd: taken = 1; name = "ljr"; c->ra = c->pc; break;
+        default:  taken = 0; name = "b?"; break;
+        }
+        trace(c, pc, "%s %04x %s", name, target, taken ? "(taken)" : "");
+        if (taken) c->pc = target;
+        return;
+    }
+
+    unsigned low4 = insn & 0xf;
+
+    // Format S: Inst{3-0} == 0100.
+    if (low4 == 0x4) {
+        unsigned func = (insn >> 8) & 0xf;
+        unsigned hi   = (insn >> 12) & 0xf;
+        unsigned mid  = (insn >> 4) & 0xf;
+
+        switch (func) {
+        case 0x0: // MOV Rd, Rs
+            c->r[mid] = c->r[hi];
+            trace(c, pc, "mov r%u, r%u -> %02x", mid, hi, c->r[mid]);
+            return;
+        case 0x1: { // MOV Xd, SFR
+            unsigned sfr = (insn >> 12) & 0x3;
+            unsigned xd = (insn >> 4) & 0x7;
+            uint16_t v = sfr == 0 ? pc : sfr == 1 ? c->ra : sfr == 2 ? c->psw : c->sp;
+            x_set(c, xd, v);
+            trace(c, pc, "mov %s, sfr%u -> %04x", x_name(xd), sfr, v);
+            return;
+        }
+        case 0x2: { // MOV SFR, Xs
+            unsigned xs = (insn >> 12) & 0x7;
+            unsigned sfr = (insn >> 4) & 0x3;
+            uint16_t v = x_get(c, xs);
+            if (sfr == 1) c->ra = v;
+            else if (sfr == 3) c->sp = v;
+            trace(c, pc, "mov sfr%u, %s -> %04x", sfr, x_name(xs), v);
+            return;
+        }
+        // The specification writes PUSH as "store then decrement" and POP as
+        // "load then increment", which are not inverses of each other.  The
+        // simulator uses the full-descending reading - decrement then store,
+        // load then increment - so that a push/pop pair round-trips, and the
+        // compiler's frame layout assumes the same.
+        case 0x8: // PUSH Rs
+            c->sp = (uint16_t)(c->sp - 1);
+            c->mem[c->sp] = c->r[hi];
+            trace(c, pc, "push r%u (%02x) sp=%04x", hi, c->r[hi], c->sp);
+            return;
+        case 0x9: { // PUSH SFR (2 bytes, little endian)
+            unsigned sfr = (insn >> 12) & 0x3;
+            uint16_t v = sfr == 0 ? pc : sfr == 1 ? c->ra : sfr == 2 ? c->psw : c->sp;
+            c->sp = (uint16_t)(c->sp - 2);
+            c->mem[c->sp] = (uint8_t)v;
+            c->mem[(uint16_t)(c->sp + 1)] = (uint8_t)(v >> 8);
+            trace(c, pc, "push sfr%u (%04x) sp=%04x", sfr, v, c->sp);
+            return;
+        }
+        case 0xa: // POP Rd
+            c->r[mid] = c->mem[c->sp];
+            c->sp = (uint16_t)(c->sp + 1);
+            trace(c, pc, "pop r%u -> %02x sp=%04x", mid, c->r[mid], c->sp);
+            return;
+        case 0xb: { // POP SFR (2 bytes, little endian)
+            unsigned sfr = (insn >> 4) & 0x3;
+            uint16_t v = (uint16_t)(c->mem[c->sp] |
+                                    (c->mem[(uint16_t)(c->sp + 1)] << 8));
+            c->sp = (uint16_t)(c->sp + 2);
+            if (sfr == 0) c->pc = v;
+            else if (sfr == 1) c->ra = v;
+            else if (sfr == 2) c->psw = v;
+            else c->sp = v;
+            trace(c, pc, "pop sfr%u -> %04x sp=%04x", sfr, v, c->sp);
+            return;
+        }
+        default:
+            break;
+        }
+    }
+
+    // Formats A and L: Inst{1-0} == 00 with Inst{3-2} selecting the class.
+    if ((insn & 3) == 0 && (low4 == 0x8 || low4 == 0xc)) {
+        unsigned func = (insn >> 8) & 0xf;
+        unsigned rd   = (insn >> 4) & 0xf;
+        unsigned hi   = (insn >> 12) & 0xf;
+        unsigned res;
+
+        if (low4 == 0x8) { // arithmetic
+            switch (func) {
+            case 0x0: // ADD
+                res = (unsigned)c->r[rd] + c->r[hi];
+                set_bit(c, PSW_CY, res > 0xff);
+                c->r[rd] = (uint8_t)res; set_nz(c, c->r[rd]);
+                trace(c, pc, "add r%u, r%u -> %02x", rd, hi, c->r[rd]);
+                return;
+            case 0x1: // ADC
+                res = (unsigned)c->r[rd] + c->r[hi] + get_bit(c, PSW_CY);
+                set_bit(c, PSW_CY, res > 0xff);
+                c->r[rd] = (uint8_t)res; set_nz(c, c->r[rd]);
+                trace(c, pc, "adc r%u, r%u -> %02x", rd, hi, c->r[rd]);
+                return;
+            case 0x4: // SUB
+                set_bit(c, PSW_CY, c->r[rd] < c->r[hi]);
+                c->r[rd] = (uint8_t)(c->r[rd] - c->r[hi]); set_nz(c, c->r[rd]);
+                trace(c, pc, "sub r%u, r%u -> %02x", rd, hi, c->r[rd]);
+                return;
+            case 0x5: { // SBB
+                unsigned borrow = (unsigned)get_bit(c, PSW_CY);
+                unsigned lhs = c->r[rd], rhs = (unsigned)c->r[hi] + borrow;
+                set_bit(c, PSW_CY, lhs < rhs);
+                c->r[rd] = (uint8_t)(lhs - rhs); set_nz(c, c->r[rd]);
+                trace(c, pc, "sbb r%u, r%u -> %02x", rd, hi, c->r[rd]);
+                return;
+            }
+            case 0x8: // INC Rd, i4 - no flags
+                c->r[rd] = (uint8_t)(c->r[rd] + hi + 1);
+                trace(c, pc, "inc r%u, %u -> %02x", rd, hi + 1, c->r[rd]);
+                return;
+            case 0x9: // DEC Rd, i4 - no flags
+                c->r[rd] = (uint8_t)(c->r[rd] - (hi + 1));
+                trace(c, pc, "dec r%u, %u -> %02x", rd, hi + 1, c->r[rd]);
+                return;
+            default:
+                break;
+            }
+        } else { // logical
+            unsigned amount = ((insn >> 12) & 0x7) + 1;
+            switch (func) {
+            case 0x0: c->r[rd] &= c->r[hi]; set_nz(c, c->r[rd]);
+                trace(c, pc, "and r%u, r%u -> %02x", rd, hi, c->r[rd]); return;
+            case 0x2: c->r[rd] |= c->r[hi]; set_nz(c, c->r[rd]);
+                trace(c, pc, "or r%u, r%u -> %02x", rd, hi, c->r[rd]); return;
+            case 0x4: c->r[rd] ^= c->r[hi]; set_nz(c, c->r[rd]);
+                trace(c, pc, "xor r%u, r%u -> %02x", rd, hi, c->r[rd]); return;
+            case 0x6: c->r[rd] = (uint8_t)~c->r[rd]; set_nz(c, c->r[rd]);
+                trace(c, pc, "not r%u -> %02x", rd, c->r[rd]); return;
+            case 0x8: // LSL
+                c->r[rd] = amount >= 8 ? 0 : (uint8_t)(c->r[rd] << amount);
+                set_nz(c, c->r[rd]);
+                trace(c, pc, "lsl r%u, %u -> %02x", rd, amount, c->r[rd]); return;
+            case 0x9: // LSR
+                c->r[rd] = amount >= 8 ? 0 : (uint8_t)(c->r[rd] >> amount);
+                set_nz(c, c->r[rd]);
+                trace(c, pc, "lsr r%u, %u -> %02x", rd, amount, c->r[rd]); return;
+            case 0xa: { // RSL
+                unsigned n = amount & 7;
+                c->r[rd] = (uint8_t)((c->r[rd] << n) | (c->r[rd] >> (8 - n)));
+                set_nz(c, c->r[rd]);
+                trace(c, pc, "rsl r%u, %u -> %02x", rd, amount, c->r[rd]); return;
+            }
+            case 0xb: { // RSR
+                unsigned n = amount & 7;
+                c->r[rd] = (uint8_t)((c->r[rd] >> n) | (c->r[rd] << (8 - n)));
+                set_nz(c, c->r[rd]);
+                trace(c, pc, "rsr r%u, %u -> %02x", rd, amount, c->r[rd]); return;
+            }
+            case 0xc: { // ASR
+                int8_t v = (int8_t)c->r[rd];
+                c->r[rd] = (uint8_t)(amount >= 8 ? (v < 0 ? -1 : 0) : (v >> amount));
+                set_nz(c, c->r[rd]);
+                trace(c, pc, "asr r%u, %u -> %02x", rd, amount, c->r[rd]); return;
+            }
+            case 0xe: // CLRF i4
+                set_bit(c, (int)hi, 0);
+                trace(c, pc, "clrf %u", hi); return;
+            case 0xf: // INVF i4
+                set_bit(c, (int)hi, !get_bit(c, (int)hi));
+                trace(c, pc, "invf %u", hi); return;
+            default:
+                break;
+            }
+        }
+    }
+
+    // Format P: Inst{3-0} == 0000.
+    if (low4 == 0x0) {
+        unsigned func = (insn >> 4) & 0xf;
+        unsigned rs1 = (insn >> 12) & 0xf;
+        unsigned rs2 = (insn >> 8) & 0xf;
+
+        switch (func) {
+        case 0x0: // machine control - the whole opcode is fixed
+            switch (insn >> 8) {
+            case 0x00: trace(c, pc, "nop"); return;
+            case 0x01: trace(c, pc, "ret -> %04x", c->ra); c->pc = c->ra; return;
+            case 0x02: trace(c, pc, "fncb"); return;
+            case 0x03: trace(c, pc, "fnca"); return;
+            case 0x80: trace(c, pc, "wfi"); c->halted = 1; return;
+            default: break;
+            }
+            break;
+
+        case 0x2: { // SWAP Rs1, Rs2
+            uint8_t t = c->r[rs1]; c->r[rs1] = c->r[rs2]; c->r[rs2] = t;
+            trace(c, pc, "swap r%u, r%u", rs1, rs2);
+            return;
+        }
+        case 0x3: { // SWAP Xs, SFR
+            unsigned xs = (insn >> 12) & 0x7;
+            unsigned sfr = (insn >> 8) & 0x3;
+            uint16_t xv = x_get(c, xs);
+            if (sfr == 1) { x_set(c, xs, c->ra); c->ra = xv; }
+            else if (sfr == 3) { x_set(c, xs, c->sp); c->sp = xv; }
+            trace(c, pc, "swap %s, sfr%u", x_name(xs), sfr);
+            return;
+        }
+        case 0x4: { // MUL Rs1, Rs2 -> W
+            uint16_t product = (uint16_t)((unsigned)c->r[rs1] * c->r[rs2]);
+            x_set(c, 4, product);
+            trace(c, pc, "mul r%u, r%u -> w=%04x", rs1, rs2, product);
+            return;
+        }
+        case 0x5: { // DIV Rs1, Rs2 -> W.lo = quotient, W.hi = remainder
+            if (c->r[rs2] == 0) {
+                set_bit(c, PSW_DZ, 1);
+                x_set(c, 4, 0);
+            } else {
+                uint8_t q = (uint8_t)(c->r[rs1] / c->r[rs2]);
+                uint8_t r = (uint8_t)(c->r[rs1] % c->r[rs2]);
+                set_bit(c, PSW_DZ, 0);
+                x_set(c, 4, (uint16_t)(q | (r << 8)));
+            }
+            trace(c, pc, "div r%u, r%u -> w=%04x", rs1, rs2, x_get(c, 4));
+            return;
+        }
+        case 0x6: { // CMP Rs1, Rs2 - unsigned ordering plus the borrow flag
+            uint8_t a = c->r[rs1], b = c->r[rs2];
+            set_bit(c, PSW_EQ, a == b);
+            set_bit(c, PSW_LT, a < b);
+            set_bit(c, PSW_GT, a > b);
+            set_bit(c, PSW_CY, a < b);
+            set_bit(c, PSW_Z, (uint8_t)(a - b) == 0);
+            set_bit(c, PSW_S, ((uint8_t)(a - b) & 0x80) != 0);
+            trace(c, pc, "cmp r%u(%02x), r%u(%02x)", rs1, a, rs2, b);
+            return;
+        }
+        case 0x8: { // JA a16
+            uint16_t target = rd16(c, (uint16_t)(pc + 2));
+            c->pc = target;
+            trace(c, pc, "ja %04x", target);
+            return;
+        }
+        case 0x9: { // LJA a16
+            uint16_t target = rd16(c, (uint16_t)(pc + 2));
+            c->ra = (uint16_t)(pc + 4);
+            c->pc = target;
+            trace(c, pc, "lja %04x (ra=%04x)", target, c->ra);
+            return;
+        }
+        default:
+            break;
+        }
+    }
+
+    fprintf(stderr, "%04x: unimplemented instruction %04x\n", pc, insn);
+    c->halted = 2;
+}
+
+//===----------------------------------------------------------------------===//
+
+int main(int argc, char **argv) {
+    const char *path = NULL;
+    uint64_t max_steps = 20000000;
+    int trace_on = 0, dump = 0, quiet = 0;
+
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--trace")) trace_on = 1;
+        else if (!strcmp(argv[i], "--dump")) dump = 1;
+        else if (!strcmp(argv[i], "--quiet")) quiet = 1;
+        else if (!strcmp(argv[i], "--max") && i + 1 < argc)
+            max_steps = strtoull(argv[++i], NULL, 0);
+        else if (argv[i][0] == '-') {
+            fprintf(stderr,
+                    "usage: %s program.elf [--trace] [--dump] [--quiet] "
+                    "[--max N]\n", argv[0]);
+            return 2;
+        } else path = argv[i];
+    }
+    if (!path) {
+        fprintf(stderr,
+                "usage: %s program.elf [--trace] [--dump] [--quiet] "
+                "[--max N]\n", argv[0]);
+        return 2;
+    }
+
+    Core *c = calloc(1, sizeof *c);
+    if (!c) { perror("calloc"); return 1; }
+    c->trace = trace_on;
+
+    uint16_t entry = 0;
+    if (load_elf(c, path, &entry) != 0) { free(c); return 1; }
+    c->pc = entry;
+    c->sp = 0xfffe;
+
+    while (!c->halted && c->cycles < max_steps)
+        step(c);
+
+    if (!c->halted)
+        fprintf(stderr, "stopped after %llu instructions without halting\n",
+                (unsigned long long)c->cycles);
+
+    // --quiet leaves only what the program itself printed.
+    if (!quiet) {
+        printf("halted after %llu instructions\n", (unsigned long long)c->cycles);
+        printf("pc=%04x sp=%04x ra=%04x psw=%04x\n", c->pc, c->sp, c->ra, c->psw);
+        // A byte-sized return lands in R0; anything 16-bit comes back in W.
+        printf("return value: r0=%u  w=%u\n", c->r[0],
+               (unsigned)(c->r[8] | (c->r[9] << 8)));
+        for (int i = 0; i < 16; i++)
+            printf("r%-2d=%02x%s", i, c->r[i], (i % 8 == 7) ? "\n" : " ");
+    }
+
+    if (dump) {
+        FILE *o = fopen("ug24-memory.bin", "wb");
+        if (o) { fwrite(c->mem, 1, MEM_SIZE, o); fclose(o); }
+    }
+
+    int status = c->halted == 2 ? 3 : c->exit_code;
+    free(c);
+    return status;
+}

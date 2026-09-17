@@ -1,0 +1,22 @@
+signed=-42
+unsigned=42
+hex=2a HEX=2A oct=52
+long=DEADBEEF
+[        42]
+[42        ]
+[0000000042]
+[+42]
+[ 42]
+[0x2a]
+[abc]
+[     123]
+[abc]
+char=A
+string=uG24
+percent=%
+test: variadic
+  -11
+  222
+  d05
+  hello
+  Z
