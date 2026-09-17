@@ -57,6 +57,23 @@ void UG24ToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
     addSystemInclude(DriverArgs, CC1Args, Dir);
 }
 
+void UG24ToolChain::addClangTargetOptions(const ArgList &DriverArgs,
+                                          ArgStringList &CC1Args,
+                                          Action::OffloadKind) const {
+  // Put every function and every variable in its own section by default, and
+  // pair it with --gc-sections in the link.  Without this the archive member
+  // is the unit of linking, so one call to printf pulls in the whole
+  // formatter and the 32-bit arithmetic under it: 15102 bytes for a program
+  // that prints one string, against 234 with them.  On a part with a 64 KB
+  // address space and no dynamic linking there is nothing to trade away.
+  if (DriverArgs.hasFlag(options::OPT_ffunction_sections,
+                         options::OPT_fno_function_sections, true))
+    CC1Args.push_back("-ffunction-sections");
+  if (DriverArgs.hasFlag(options::OPT_fdata_sections,
+                         options::OPT_fno_data_sections, true))
+    CC1Args.push_back("-fdata-sections");
+}
+
 Tool *UG24ToolChain::buildLinker() const {
   return new tools::ug24::Linker(*this);
 }
@@ -74,6 +91,10 @@ void ug24::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   // this target.
   CmdArgs.push_back("-m");
   CmdArgs.push_back("elf32ug24");
+
+  // Drop the sections nothing references.  This goes in before the user's
+  // own linker arguments, so -Wl,--no-gc-sections still wins.
+  CmdArgs.push_back("--gc-sections");
 
   std::string RuntimeDir = TC.getRuntimeDir();
 

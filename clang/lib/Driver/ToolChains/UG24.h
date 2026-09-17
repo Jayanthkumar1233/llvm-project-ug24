@@ -73,6 +73,10 @@ public:
   void AddClangSystemIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                                  llvm::opt::ArgStringList &CC1Args) const override;
 
+  void addClangTargetOptions(const llvm::opt::ArgList &DriverArgs,
+                             llvm::opt::ArgStringList &CC1Args,
+                             Action::OffloadKind) const override;
+
   /// Directory holding crt0.o, libug24.a and ug24.ld.
   std::string getRuntimeDir() const;
 
