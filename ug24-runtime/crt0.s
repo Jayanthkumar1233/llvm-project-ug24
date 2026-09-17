@@ -41,6 +41,37 @@ _start:
 	jr	.Lbss_loop
 .Lbss_done:
 
+	; Copy .data from its load address to its run address.  These are the
+	; same while MEM is one flat region, so the loop exits immediately; it
+	; is here so that splitting MEM into ROM and RAM, or into ITCM and
+	; DTCM, needs no change to the startup code.  DPTR1 walks the source
+	; and DPTR0 the destination, selected by PSW.DP.
+	mvi	r12, lo8(__data_load_start)
+	mvi	r13, hi8(__data_load_start)
+	mvi	r14, lo8(__data_start)
+	mvi	r15, hi8(__data_start)
+.Ldata_loop:
+	mvi	r1, lo8(__data_end)
+	cmp	r14, r1
+	bne	.Ldata_copy
+	mvi	r1, hi8(__data_end)
+	cmp	r15, r1
+	beq	.Ldata_done
+.Ldata_copy:
+	invf	8			; PSW.DP = 1: read through DPTR1
+	ld	r0, [0]
+	clrf	8			; PSW.DP = 0: write through DPTR0
+	st	r0, [0]
+	adi	r12, 1
+	bnc	.Ldata_src_ok
+	adi	r13, 1
+.Ldata_src_ok:
+	adi	r14, 1
+	bnc	.Ldata_loop
+	adi	r15, 1
+	jr	.Ldata_loop
+.Ldata_done:
+
 	; Hand over to the application.
 	lja	main
 

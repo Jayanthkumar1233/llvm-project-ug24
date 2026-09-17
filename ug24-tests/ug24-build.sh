@@ -8,6 +8,14 @@ set -e
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 CLANG="$ROOT/build-ug24/bin/clang"
+
+if [ ! -x "$CLANG" ]; then
+    echo "$0: no uG24 compiler at $CLANG" >&2
+    echo "  build-ug24/ is a build tree and is deliberately not in the" >&2
+    echo "  repository.  Build it first:  ./ug24-setup.sh" >&2
+    exit 1
+fi
+
 OBJDUMP="$ROOT/build-ug24/bin/llvm-objdump"
 TRIPLE=ug24-unknown-none-eabi
 OPT=${OPT:--Os}

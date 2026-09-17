@@ -24,7 +24,11 @@ MEMORY
   MMIO (rw)  : ORIGIN = 0xFF00, LENGTH = 0x0100
 }
 
-__stack_size = DEFINED(__stack_size) ? __stack_size : 0x400;
+/* PROVIDE, not a conditional assignment: "DEFINED(x) ? x : default" is
+ * self-referential here and lld resolves it to zero, which silently put
+ * __heap_end at __stack_top and let malloc hand out the stack's memory.
+ * Override it on the link line with -Wl,--defsym=__stack_size=N. */
+PROVIDE(__stack_size = 0x400);
 
 SECTIONS
 {
@@ -36,13 +40,18 @@ SECTIONS
     . = ALIGN(2);
   } > MEM
 
+  /* AT> makes the load address explicit so that __data_load_start is
+   * meaningful.  With one flat region the load and run addresses are equal
+   * and crt0's copy loop is a no-op; split MEM into ROM and RAM (or into
+   * ITCM and DTCM) and the same loop starts doing real work. */
   .data : ALIGN(2)
   {
     __data_start = .;
     *(.data .data.*)
     . = ALIGN(2);
     __data_end = .;
-  } > MEM
+  } > MEM AT> MEM
+  __data_load_start = LOADADDR(.data);
 
   .bss : ALIGN(2)
   {

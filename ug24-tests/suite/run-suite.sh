@@ -8,6 +8,14 @@ set -e
 DIR=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$DIR/../.." && pwd)
 BIN="$ROOT/build-ug24/bin"
+
+if [ ! -x "$BIN/clang" ]; then
+    echo "$0: no uG24 compiler at $BIN/clang" >&2
+    echo "  build-ug24/ is a build tree and is deliberately not in the" >&2
+    echo "  repository.  Build it first:  ./ug24-setup.sh" >&2
+    exit 1
+fi
+
 SIM="$ROOT/ug24-sim/ug24sim"
 WORK=$(mktemp -d); trap 'rm -rf "$WORK"' EXIT
 

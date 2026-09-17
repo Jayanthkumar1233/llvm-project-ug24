@@ -48,6 +48,15 @@ typedef struct {
     int      halted;
     int      exit_code;
     int      trace;
+
+    // The stack window, read from __heap_end and __stack_top in the ELF
+    // symbol table.  A stack that grows past either end is a spec exception
+    // (SE), and on this part nothing catches it in hardware -- the program
+    // just corrupts the heap and carries on.  Checking it here turns silent
+    // corruption into a diagnostic.  Both zero means the symbols were absent
+    // and the check is skipped.
+    uint16_t stack_low, stack_high;
+    int      stack_checked;
 } Core;
 
 // All data accesses go through these so that the peripheral window behaves
@@ -179,9 +188,61 @@ static int load_elf(Core *c, const char *path, uint16_t *entry) {
         memset(c->mem + p_paddr + p_filesz, 0, p_memsz - p_filesz);
     }
 
+    // Find __heap_end and __stack_top so that the stack can be bounds-checked.
+    uint32_t e_shoff = hdr[32] | (hdr[33]<<8) | (hdr[34]<<16) | ((uint32_t)hdr[35]<<24);
+    unsigned e_shentsize = hdr[46] | (hdr[47] << 8);
+    unsigned e_shnum     = hdr[48] | (hdr[49] << 8);
+    for (unsigned i = 0; i < e_shnum; i++) {
+        unsigned char sh[40];
+        if (fseek(f, (long)(e_shoff + (uint32_t)i * e_shentsize), SEEK_SET)) break;
+        if (fread(sh, 1, sizeof sh, f) != sizeof sh) break;
+        uint32_t sh_type = sh[4] | (sh[5]<<8) | (sh[6]<<16) | ((uint32_t)sh[7]<<24);
+        if (sh_type != 2 /* SHT_SYMTAB */) continue;
+
+        uint32_t sym_off  = sh[16]| (sh[17]<<8)| (sh[18]<<16)| ((uint32_t)sh[19]<<24);
+        uint32_t sym_size = sh[20]| (sh[21]<<8)| (sh[22]<<16)| ((uint32_t)sh[23]<<24);
+        uint32_t link     = sh[24]| (sh[25]<<8)| (sh[26]<<16)| ((uint32_t)sh[27]<<24);
+
+        unsigned char strsh[40];
+        if (fseek(f, (long)(e_shoff + link * e_shentsize), SEEK_SET)) break;
+        if (fread(strsh, 1, sizeof strsh, f) != sizeof strsh) break;
+        uint32_t str_off = strsh[16]|(strsh[17]<<8)|(strsh[18]<<16)|((uint32_t)strsh[19]<<24);
+
+        for (uint32_t o = 0; o + 16 <= sym_size; o += 16) {
+            unsigned char sym[16];
+            if (fseek(f, (long)(sym_off + o), SEEK_SET)) break;
+            if (fread(sym, 1, sizeof sym, f) != sizeof sym) break;
+            uint32_t name = sym[0] | (sym[1]<<8) | (sym[2]<<16) | ((uint32_t)sym[3]<<24);
+            uint32_t val  = sym[4] | (sym[5]<<8) | (sym[6]<<16) | ((uint32_t)sym[7]<<24);
+            if (!name) continue;
+            char buf[32];
+            if (fseek(f, (long)(str_off + name), SEEK_SET)) break;
+            size_t got = fread(buf, 1, sizeof buf - 1, f);
+            buf[got] = '\0';
+            if (!strcmp(buf, "__heap_end"))  { c->stack_low  = (uint16_t)val; }
+            else if (!strcmp(buf, "__stack_top")) { c->stack_high = (uint16_t)val; }
+        }
+        break;
+    }
+    c->stack_checked = c->stack_low && c->stack_high && c->stack_low < c->stack_high;
+
     fclose(f);
     *entry = (uint16_t)e_entry;
     return 0;
+}
+
+// Called after every instruction that can move SP.
+static void check_stack(Core *c) {
+    if (!c->stack_checked || c->halted) return;
+    if (c->sp < c->stack_low) {
+        fprintf(stderr, "stack overflow: sp=%04x fell below __heap_end=%04x\n",
+                c->sp, c->stack_low);
+        c->halted = 3;
+    } else if (c->sp > c->stack_high) {
+        fprintf(stderr, "stack underflow: sp=%04x rose above __stack_top=%04x\n",
+                c->sp, c->stack_high);
+        c->halted = 3;
+    }
 }
 
 //===----------------------------------------------------------------------===//
@@ -587,10 +648,17 @@ int main(int argc, char **argv) {
     uint16_t entry = 0;
     if (load_elf(c, path, &entry) != 0) { free(c); return 1; }
     c->pc = entry;
-    c->sp = 0xfffe;
+    // A real uG24 takes its reset SP from the strapped i_reset_sp pin.  The
+    // closest thing available here is __stack_top from the image, which is
+    // what crt0 loads anyway; 0xfffe is the fallback when the symbol is
+    // missing.  Seeding it this way also keeps the bounds check below from
+    // firing on the instructions before crt0 has set SP.
+    c->sp = c->stack_high ? c->stack_high : 0xfffe;
 
-    while (!c->halted && c->cycles < max_steps)
+    while (!c->halted && c->cycles < max_steps) {
         step(c);
+        check_stack(c);
+    }
 
     if (!c->halted)
         fprintf(stderr, "stopped after %llu instructions without halting\n",
@@ -612,7 +680,9 @@ int main(int argc, char **argv) {
         if (o) { fwrite(c->mem, 1, MEM_SIZE, o); fclose(o); }
     }
 
-    int status = c->halted == 2 ? 3 : c->exit_code;
+    // 3: hit an instruction the ISA does not define.  4: the stack left its
+    // window.  Otherwise the value the program returned.
+    int status = c->halted == 2 ? 3 : c->halted == 3 ? 4 : c->exit_code;
     free(c);
     return status;
 }
