@@ -1,0 +1,9 @@
+# ninja log v5
+1	7	1775277518982420707	include/orc_rt/c_api.h	b76a0094cf4bdf52
+2	8	1775277518984468850	include/sanitizer/memprof_interface.h	d6e317be250dfb9d
+1	7	1775277518982420707	/home/basil-16/llvm-arm-cross/llvm-project/build-rt-m4/include/orc_rt/c_api.h	b76a0094cf4bdf52
+1	8	1775277518984468850	include/profile/MemProfData.inc	8a5109ead930dfc0
+1	8	1775277518984468850	/home/basil-16/llvm-arm-cross/llvm-project/build-rt-m4/include/profile/MemProfData.inc	8a5109ead930dfc0
+2	8	1775277518984468850	/home/basil-16/llvm-arm-cross/llvm-project/build-rt-m4/include/sanitizer/memprof_interface.h	d6e317be250dfb9d
+8	20	0	CMakeFiles/install.util	181626764f26ea76
+3	35	0	CMakeFiles/install.util	181626764f26ea76

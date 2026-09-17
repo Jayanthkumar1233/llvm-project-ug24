@@ -1,0 +1,2 @@
+/home/basil-16/llvm-arm-cross/toolchain-armhf/bin/llvm-ar qc ../linux/liborc_rt-armhf.a CMakeFiles/RTOrc.armhf.dir/debug.cpp.o CMakeFiles/RTOrc.armhf.dir/extensible_rtti.cpp.o CMakeFiles/RTOrc.armhf.dir/log_error_to_stderr.cpp.o CMakeFiles/RTOrc.armhf.dir/run_program_wrapper.cpp.o CMakeFiles/RTOrc.armhf.dir/dlfcn_wrapper.cpp.o CMakeFiles/RTOrc.armhf.dir/elfnix_platform.cpp.o "CMakeFiles/RTOrc.armhf.dir/elfnix_tls.x86-64.S.o" CMakeFiles/RTOrc.armhf.dir/elfnix_tls.aarch64.S.o
+/home/basil-16/llvm-arm-cross/toolchain-armhf/bin/llvm-ranlib ../linux/liborc_rt-armhf.a

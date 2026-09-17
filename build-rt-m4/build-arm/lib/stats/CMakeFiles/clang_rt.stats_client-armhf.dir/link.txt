@@ -1,0 +1,2 @@
+/home/basil-16/llvm-arm-cross/toolchain-armhf/bin/llvm-ar qc ../linux/libclang_rt.stats_client-armhf.a "CMakeFiles/clang_rt.stats_client-armhf.dir/stats_client.cpp.o"
+/home/basil-16/llvm-arm-cross/toolchain-armhf/bin/llvm-ranlib ../linux/libclang_rt.stats_client-armhf.a

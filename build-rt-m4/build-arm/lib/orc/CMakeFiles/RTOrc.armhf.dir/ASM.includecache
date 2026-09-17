@@ -1,0 +1,12 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/orc/elfnix_tls.aarch64.S
+
+/home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/orc/elfnix_tls.x86-64.S
+

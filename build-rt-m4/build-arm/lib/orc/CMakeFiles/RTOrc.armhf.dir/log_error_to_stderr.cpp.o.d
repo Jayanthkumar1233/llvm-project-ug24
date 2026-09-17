@@ -1,0 +1,30 @@
+lib/orc/CMakeFiles/RTOrc.armhf.dir/log_error_to_stderr.cpp.o: \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/orc/log_error_to_stderr.cpp \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/orc/compiler.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/stdio.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/libc-header-start.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/features.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/features-time64.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/wordsize.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/timesize.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/stdc-predef.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/sys/cdefs.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/long-double.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/gnu/stubs.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/gnu/stubs-hard.h \
+  /home/basil-16/llvm-arm-cross/toolchain-armhf/lib/clang/17/include/stddef.h \
+  /home/basil-16/llvm-arm-cross/toolchain-armhf/lib/clang/17/include/stdarg.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/types.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/typesizes.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/time64.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/types/__fpos_t.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/types/__mbstate_t.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/types/__fpos64_t.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/types/__FILE.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/types/FILE.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/types/struct_FILE.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/types/cookie_io_functions_t.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/stdio_lim.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/floatn.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/floatn-common.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/stdio.h

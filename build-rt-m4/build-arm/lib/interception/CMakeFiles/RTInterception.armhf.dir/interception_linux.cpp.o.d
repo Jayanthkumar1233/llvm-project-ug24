@@ -1,0 +1,22 @@
+lib/interception/CMakeFiles/RTInterception.armhf.dir/interception_linux.cpp.o: \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/interception/interception_linux.cpp \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/interception/interception.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/interception/../sanitizer_common/sanitizer_asm.h \
+  /home/basil-16/llvm-arm-cross/toolchain-armhf/lib/clang/17/include/cet.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/interception/../sanitizer_common/sanitizer_internal_defs.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/interception/../sanitizer_common/sanitizer_platform.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/features.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/features-time64.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/wordsize.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/timesize.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/stdc-predef.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/sys/cdefs.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/long-double.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/gnu/stubs.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/gnu/stubs-hard.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/interception/../sanitizer_common/sanitizer_redefine_builtins.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/interception/interception_linux.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/dlfcn.h \
+  /home/basil-16/llvm-arm-cross/toolchain-armhf/lib/clang/17/include/stddef.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/dlfcn.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/dl_find_object.h

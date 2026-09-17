@@ -1,0 +1,37 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/basil-16/llvm-arm-cross/llvm-project/build-rt-m4/build-arm/lib/fuzzer/CMakeFiles/libcxx_fuzzer_armhf-build"
+		},
+		{
+			"file" : "/home/basil-16/llvm-arm-cross/llvm-project/build-rt-m4/build-arm/lib/fuzzer/CMakeFiles/libcxx_fuzzer_armhf-build.rule"
+		},
+		{
+			"file" : "/home/basil-16/llvm-arm-cross/llvm-project/build-rt-m4/build-arm/lib/fuzzer/libcxx_fuzzer_armhf/src/libcxx_fuzzer_armhf-stamp/libcxx_fuzzer_armhf-build.rule"
+		},
+		{
+			"file" : "/home/basil-16/llvm-arm-cross/llvm-project/build-rt-m4/build-arm/lib/fuzzer/libcxx_fuzzer_armhf/src/libcxx_fuzzer_armhf-stamp/libcxx_fuzzer_armhf-configure.rule"
+		},
+		{
+			"file" : "/home/basil-16/llvm-arm-cross/llvm-project/build-rt-m4/build-arm/lib/fuzzer/libcxx_fuzzer_armhf/src/libcxx_fuzzer_armhf-stamp/libcxx_fuzzer_armhf-patch.rule"
+		},
+		{
+			"file" : "/home/basil-16/llvm-arm-cross/llvm-project/build-rt-m4/build-arm/lib/fuzzer/libcxx_fuzzer_armhf/src/libcxx_fuzzer_armhf-stamp/libcxx_fuzzer_armhf-update.rule"
+		},
+		{
+			"file" : "/home/basil-16/llvm-arm-cross/llvm-project/build-rt-m4/build-arm/lib/fuzzer/libcxx_fuzzer_armhf/src/libcxx_fuzzer_armhf-stamp/libcxx_fuzzer_armhf-download.rule"
+		},
+		{
+			"file" : "/home/basil-16/llvm-arm-cross/llvm-project/build-rt-m4/build-arm/lib/fuzzer/libcxx_fuzzer_armhf/src/libcxx_fuzzer_armhf-stamp/libcxx_fuzzer_armhf-mkdir.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"libcxx_fuzzer_armhf"
+		],
+		"name" : "libcxx_fuzzer_armhf-build"
+	}
+}

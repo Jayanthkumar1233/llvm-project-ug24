@@ -1,0 +1,31 @@
+lib/builtins/CMakeFiles/clang_rt.builtins-armhf.dir/truncdfsf2.c.o: \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/builtins/truncdfsf2.c \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/builtins/fp_trunc_impl.inc \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/builtins/fp_trunc.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/builtins/int_lib.h \
+  /home/basil-16/llvm-arm-cross/toolchain-armhf/lib/clang/17/include/float.h \
+  /home/basil-16/llvm-arm-cross/toolchain-armhf/lib/clang/17/include/limits.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/limits.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/libc-header-start.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/features.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/features-time64.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/wordsize.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/timesize.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/stdc-predef.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/sys/cdefs.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/long-double.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/gnu/stubs.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/gnu/stubs-hard.h \
+  /home/basil-16/llvm-arm-cross/toolchain-armhf/lib/clang/17/include/stdbool.h \
+  /home/basil-16/llvm-arm-cross/toolchain-armhf/lib/clang/17/include/stdint.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/stdint.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/types.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/typesizes.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/time64.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/wchar.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/stdint-intn.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/stdint-uintn.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/stdint-least.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/builtins/int_types.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/builtins/int_endianness.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/builtins/int_util.h

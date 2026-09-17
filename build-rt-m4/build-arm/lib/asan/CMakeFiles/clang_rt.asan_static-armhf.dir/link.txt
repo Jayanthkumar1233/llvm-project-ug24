@@ -1,0 +1,2 @@
+/home/basil-16/llvm-arm-cross/toolchain-armhf/bin/llvm-ar qc ../linux/libclang_rt.asan_static-armhf.a CMakeFiles/RTAsan_static.armhf.dir/asan_rtl_static.cpp.o
+/home/basil-16/llvm-arm-cross/toolchain-armhf/bin/llvm-ranlib ../linux/libclang_rt.asan_static-armhf.a

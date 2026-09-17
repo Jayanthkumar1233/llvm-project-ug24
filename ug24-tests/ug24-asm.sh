@@ -9,14 +9,26 @@
 set -e
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-BIN="$ROOT/build-ug24/bin"
 
-if [ ! -x "$BIN/clang" ]; then
-    echo "$0: no uG24 compiler at $BIN/clang" >&2
-    echo "  build-ug24/ is a build tree and is deliberately not in the" >&2
-    echo "  repository.  Build it first:  ./ug24-setup.sh" >&2
+# Locate the uG24 toolchain.  It may be built inside this repository
+# (build-ug24/) or in the directory above it, which is where the older
+# layout put it.  UG24_BUILD overrides both.
+if [ -n "$UG24_BUILD" ]; then
+    BIN="$UG24_BUILD/bin"
+elif [ -x "$BIN/clang" ]; then
+    BIN="$ROOT/build-ug24/bin"
+elif [ -x "$ROOT/../build-ug24/bin/clang" ]; then
+    BIN="$ROOT/../build-ug24/bin"
+else
+    echo "$0: no uG24 compiler found" >&2
+    echo "  looked in $ROOT/build-ug24/bin and $ROOT/../build-ug24/bin" >&2
+    echo "  build it with ./ug24-setup.sh, or set UG24_BUILD=/path/to/build" >&2
     exit 1
 fi
+SIM_BIN="$SIM_BIN"
+[ -x "$SIM_BIN" ] || SIM_BIN="$ROOT/../ug24-sim/ug24sim"
+
+
 
 OPT=${OPT:--Os}
 TRIPLE=ug24-unknown-none-eabi

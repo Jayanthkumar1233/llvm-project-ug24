@@ -1,0 +1,2 @@
+/home/basil-16/llvm-arm-cross/toolchain-armhf/bin/llvm-ar Dqc ../../lib/libc++experimental.a CMakeFiles/cxx_experimental.dir/experimental/memory_resource.cpp.o
+/home/basil-16/llvm-arm-cross/toolchain-armhf/bin/llvm-ranlib -D ../../lib/libc++experimental.a

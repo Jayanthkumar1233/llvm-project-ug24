@@ -1,0 +1,16 @@
+Testing compiler for supporting SOURCE
+asm(".arch armv8-a+lse")
+asm("cas w0, w1, [x2]")
+:
+Command: /home/basil-16/llvm-arm-cross/toolchain-armhf/bin/clang;;;--target=armv7-linux-gnueabihf;--sysroot=/usr/arm-linux-gnueabihf;--gcc-toolchain=/usr;-fuse-ld=lld;-Wall;;-o;/home/basil-16/llvm-arm-cross/llvm-project/build-rt-m4/build-arm/CMakeFiles/test.o;-c;/home/basil-16/llvm-arm-cross/llvm-project/build-rt-m4/build-arm/CMakeFiles/src.c
+
+clang: warning: argument unused during compilation: '-fuse-ld=lld' [-Wunused-command-line-argument]
+<inline asm>:1:1: error: Unknown arch name
+    1 | .arch armv8-a+lse
+      | ^
+<inline asm>:2:1: error: instruction 'ca' can not set flags, but 's' suffix specified
+    2 | cas w0, w1, [x2]
+      | ^
+2 errors generated.
+
+1

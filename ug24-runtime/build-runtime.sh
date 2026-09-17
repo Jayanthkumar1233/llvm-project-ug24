@@ -3,10 +3,24 @@
 # toolchain's lib/ug24 directory, which is where the clang driver looks.
 set -e
 
-BUILD=${1:-build-ug24}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-BIN="$ROOT/$BUILD/bin"
-OUT="$ROOT/$BUILD/lib/ug24"
+
+# The argument may be an absolute path or a directory name relative to the
+# repository root; UG24_BUILD overrides it.  Falls back to the directory above
+# the repository, which is where the older layout kept the build tree.
+BUILD=${1:-${UG24_BUILD:-build-ug24}}
+case "$BUILD" in
+    /*) BUILD_DIR=$BUILD ;;
+    *)  if [ -d "$ROOT/$BUILD" ]; then BUILD_DIR="$ROOT/$BUILD"
+        else BUILD_DIR="$ROOT/../$BUILD"; fi ;;
+esac
+BIN="$BUILD_DIR/bin"
+OUT="$BUILD_DIR/lib/ug24"
+
+[ -x "$BIN/clang" ] || {
+    echo "$0: no uG24 clang at $BIN/clang" >&2
+    exit 1
+}
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 

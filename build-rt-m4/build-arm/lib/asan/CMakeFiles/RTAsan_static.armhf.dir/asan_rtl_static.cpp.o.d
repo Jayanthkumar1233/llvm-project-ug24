@@ -1,0 +1,24 @@
+lib/asan/CMakeFiles/RTAsan_static.armhf.dir/asan_rtl_static.cpp.o: \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/asan/asan_rtl_static.cpp \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/asan/../sanitizer_common/sanitizer_common.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/asan/../sanitizer_common/sanitizer_flags.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/asan/../sanitizer_common/sanitizer_internal_defs.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/asan/../sanitizer_common/sanitizer_platform.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/features.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/features-time64.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/wordsize.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/timesize.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/stdc-predef.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/sys/cdefs.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/bits/long-double.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/gnu/stubs.h \
+  /usr/lib/gcc-cross/arm-linux-gnueabihf/13/../../../../arm-linux-gnueabihf/include/gnu/stubs-hard.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/asan/../sanitizer_common/sanitizer_redefine_builtins.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/asan/../sanitizer_common/sanitizer_flags.inc \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/asan/../sanitizer_common/sanitizer_libc.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/asan/../sanitizer_common/sanitizer_list.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/asan/../sanitizer_common/sanitizer_mutex.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/asan/../sanitizer_common/sanitizer_atomic.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/asan/../sanitizer_common/sanitizer_atomic_clang.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/asan/../sanitizer_common/sanitizer_atomic_clang_other.h \
+  /home/basil-16/llvm-arm-cross/llvm-project/compiler-rt/lib/asan/../sanitizer_common/sanitizer_thread_safety.h

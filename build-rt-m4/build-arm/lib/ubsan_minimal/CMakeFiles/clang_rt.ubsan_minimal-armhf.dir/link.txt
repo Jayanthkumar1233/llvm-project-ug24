@@ -1,0 +1,2 @@
+/home/basil-16/llvm-arm-cross/toolchain-armhf/bin/llvm-ar qc ../linux/libclang_rt.ubsan_minimal-armhf.a CMakeFiles/RTUbsan_minimal.armhf.dir/ubsan_minimal_handlers.cpp.o
+/home/basil-16/llvm-arm-cross/toolchain-armhf/bin/llvm-ranlib ../linux/libclang_rt.ubsan_minimal-armhf.a

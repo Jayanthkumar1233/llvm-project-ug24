@@ -1,0 +1,15 @@
+Testing compiler for supporting SOURCE
+asm(".arch armv8-a+lse")
+asm("cas w0, w1, [x2]")
+:
+Command: /home/basil-16/llvm-arm-cross/stage1/bin/clang;;;--gcc-toolchain=/usr;-march=armv7-a;-mfloat-abi=hard;-Wall;-Wno-unused-parameter;--target=armv7-linux-gnueabihf;-o;/home/basil-16/llvm-arm-cross/llvm-project/build-rt-armhf/CMakeFiles/test.o;-c;/home/basil-16/llvm-arm-cross/llvm-project/build-rt-armhf/CMakeFiles/src.c
+
+<inline asm>:1:1: error: Unknown arch name
+    1 | .arch armv8-a+lse
+      | ^
+<inline asm>:2:1: error: instruction 'ca' can not set flags, but 's' suffix specified
+    2 | cas w0, w1, [x2]
+      | ^
+2 errors generated.
+
+1
