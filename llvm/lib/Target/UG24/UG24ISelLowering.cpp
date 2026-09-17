@@ -151,10 +151,20 @@ static SDValue narrowToByte(SDValue V, const SDLoc &DL, SelectionDAG &DAG) {
   case ISD::MUL:
   case ISD::ADD:
   case ISD::SUB:
-  case ISD::AND:
-  case ISD::OR:
-  case ISD::XOR:
     break;
+
+  // AND, OR and XOR must not be narrowed here, and the reason is worth
+  // spelling out because the omission looks like one.  DAGCombiner's
+  // hoistLogicOpWithSameOpcodeHands rewrites (logic (trunc x), (trunc y))
+  // back into (trunc (logic x, y)) for the bitwise operations; it declines
+  // only when both isZExtFree and isTruncateFree hold, and zero-extending a
+  // byte to a word is not free on this target.  So narrowing here and
+  // hoisting there undo each other for ever and the compiler hangs -- on
+  // nothing more exotic than trunc(or i16).
+  //
+  // Leaving them 16-bit costs one instruction: UG24ExpandPseudo splits the
+  // operation into two byte operations and the one feeding the discarded
+  // half is dead.  That is the whole price.
   default:
     return SDValue();
   }

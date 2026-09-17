@@ -36,7 +36,11 @@ for SRC in "$DIR"/${1:-*}.c; do
     NAME=$(basename "$SRC" .c)
     printf '%-14s' "$NAME"
     for OPT in -O0 -O1 -O2 -Os -O3; do
-        if ! "$BIN/clang" --target=ug24-unknown-none-eabi $OPT "$SRC" \
+        # A test may bring an .s file alongside its .c, for the instructions
+        # no C construct can reach.
+        ASM=""
+        [ -f "$DIR/$NAME.s" ] && ASM="$DIR/$NAME.s"
+        if ! "$BIN/clang" --target=ug24-unknown-none-eabi $OPT "$SRC" $ASM \
                 -o "$WORK/$NAME.elf" > "$WORK/build.log" 2>&1; then
             printf ' %s:BUILD' "$OPT"; FAIL=$((FAIL+1)); continue
         fi

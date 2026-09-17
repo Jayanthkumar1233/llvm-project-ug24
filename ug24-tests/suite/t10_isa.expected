@@ -1,0 +1,22 @@
+rotates
+  rsl 0x81 by 3          = 000C
+  rsr 0x81 by 3          = 0030
+  rsl via C idiom        = 000C
+  rsl 0xFF by 3          = 00FF
+  rsr 0x01 by 3          = 0020
+swap
+  swap 0xBEEF            = EFBE
+  swap 0x00FF            = FF00
+flags
+  clrf/invf on PSW.DP    = 0001
+stack
+  push/pop byte + psw    = 005A
+  push/pop 0xA5          = 00A5
+fences
+  fnca/fncb survived     = 003C
+second data pointer
+  load table[0] via dptr1 = 0011
+  load table[3] via dptr1 = 0044
+  dptr0 still works after = 0033
+
+PASS - 14 checks, all correct
