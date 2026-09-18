@@ -2,10 +2,11 @@
 
 **uG24 Specification Queries — with compiler-team answers filled in**
 
-| Revision | Rev 4 — answers added by the working toolchain |
+| Revision | Rev 5 — 18 September 2026, answers re-checked against the toolchain as built |
 | :---- | :---- |
 | **Sources checked** | `Copy of uG24xx1616uP_ISA.xlsx`; `uG24081616uP_spec.pdf` Rev 0.1 |
 | **Answer status** | 14 resolved from the specification · 17 answered by toolchain decision (need sign-off) · 20 still hardware-only · 3 query defects |
+| **Changed in Rev 5** | G5 no longer blocking — subtarget features added. F1–F4 implemented against an assumed model; the assumptions are now listed. **I3 has become blocking** — the indirect call added since Rev 4 depends on it. |
 | **Answered by** | Working LLVM 17 backend, assembler, linker, runtime and instruction-set simulator for `ug24-unknown-none-eabi` |
 
 ---
@@ -393,16 +394,33 @@ is no debugger, and worth revisiting if JTAG debug is enabled (K5).
 
 # **F. Interrupts and exceptions**
 
-## **F1–F4 STILL OPEN — all four.**
+## **F1–F4 STILL OPEN — all four, and now implemented against a guess.**
 
-A compiler cannot answer any of these. The toolchain currently emits **no
-interrupt support at all**: there is no `__attribute__((interrupt))`, no vector
-table in the linker script, and no handler prologue or epilogue. Nothing here
-blocks ordinary C compilation, but nothing here works either.
+A compiler cannot answer any of these. What changed since Rev 4 is that the
+toolchain no longer *lacks* interrupt support — it has a complete
+implementation resting on an assumed model, which is a different and more
+dangerous state. If the model is wrong, handlers compile and run in simulation
+and fail on silicon.
 
-The four answers map directly onto four pieces of work: F1 → the linker script
-vector table; F2 → the handler prologue; F3 → the handler epilogue; F4 → the
-flag-clearing sequence inside it.
+What is now built, and what each piece assumes:
+
+| Query | What it should decide | What the toolchain assumes today |
+| :---- | :---- | :---- |
+| F1 | Where the vector table lives and how a slot is encoded | Four slots at `0x0000`, each **one `LJA`** (four bytes), so the core executes slot 0 out of reset. Reset, NMI, maskable, software. |
+| F2 | What the hardware pushes on entry | The interrupted **`PC`, then `PSW`**, then `PSW.IE` cleared and `PSW.MI` set. |
+| F3 | How a handler returns | **`POP PSW` then `POP PC`.** There is no `RETI` in the ISA and none was invented. |
+| F4 | How a source is acknowledged | A write-one-to-clear status register at `0xFF10`, with enable at `0xFF11`. Entirely invented — the specification names no interrupt controller at all. |
+
+The compiler side of it is real regardless of the answers:
+`__attribute__((interrupt))` makes a handler preserve every register it writes,
+including the reserved `R11` and `DPTR0` that the generic callee-saved
+machinery cannot see. Only F2/F3 — the entry and exit sequence — and F1's table
+layout would have to change, and both are localised: `UG24ExpandPseudo` for the
+return, `crt0.s` for the table.
+
+**This is the item on the whole list most worth an answer**, because it is the
+only place where the toolchain will look correct in testing and be wrong in
+the part.
 
 ---
 
@@ -454,15 +472,21 @@ multiply and divide we generate is wrong. Please confirm explicitly.
 
 ## **G5 Will multiply and divide be present in the target configuration? BLOCKING**
 
-**ANSWER — STILL OPEN, and this now has teeth.**
+**ANSWER — STILL OPEN, but no longer blocking.**
 
 §1.1: "Configurable implementation of Multiply & Divide instructions" —
-verified. The backend **currently emits `MUL` and `DIV` unconditionally**, so a
-configuration without them would not run our output at all.
+verified. Since Rev 4 the backend has subtarget features for both:
+`-mcpu=ug24-base` compiles for a part with neither, and the same operations
+become calls to the runtime helpers, which are shift-and-add loops and need no
+hardware block of their own. The assembler rejects `mul` and `div` there too,
+rather than encoding something the part cannot execute.
 
-Making this a subtarget flag is straightforward, but we need to know whether to
-bother, and at which multiply depth. If the answer is "both present", say so and
-we will hard-code it.
+Both default to **present**, because that is what the documents describe. An
+answer now only changes which default is right, not whether the configuration
+can be built — and the runtime library does not have to be rebuilt either way.
+
+Still worth an answer: the multiply *depth* (whether `MUL` is 8×8 in one pass
+or iterative) decides whether the 16-bit multiply is worth expanding inline.
 
 ---
 
@@ -525,10 +549,33 @@ look nothing like compiler bugs.
 register throughout — it is the single most common pattern in the output. If a
 delay slot exists, essentially every function we generate is broken.
 
-## **I3 Which PC does MOV Xd, PC read? IMPORTANT**
+## **I3 Which PC does MOV Xd, PC read? BLOCKING**
 
-**ANSWER — STILL OPEN, no current impact.** The backend does not generate
-`MOV Xd, PC`; all addressing is absolute via `lo8`/`hi8` relocations.
+**ANSWER — STILL OPEN, and this has become blocking since Rev 4.**
+
+Rev 4 recorded this as "no current impact — the backend does not generate
+`MOV Xd, PC`". That is no longer true. The indirect call, added to close O1,
+is built out of it:
+
+```
+    mov  dptr0, pc      ; assumed: the address of this very instruction
+    mvi  r11, 0
+    adi  r14, 16        ; ... plus the length of the whole sequence
+    adc  r15, r11
+    mov  ra, dptr0      ; so RA is the instruction after the sequence
+    push target.hi
+    push target.lo
+    pop  pc
+```
+
+The `+16` is computed from the assumption that `MOV Xd, PC` reads **the address
+of the `MOV` itself**. If it reads `PC+2`, or the address of the next
+instruction, every call through a function pointer returns two or four bytes
+off — into the middle of the caller's next instruction. Direct calls are
+unaffected: `LJA` sets `RA` itself.
+
+One constant in `UG24ExpandPseudo.cpp` changes if the answer differs, so the
+fix is trivial; knowing which answer is right is not.
 
 ---
 
