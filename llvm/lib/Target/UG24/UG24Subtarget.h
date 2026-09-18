@@ -24,6 +24,13 @@
 namespace llvm {
 
 class UG24Subtarget : public UG24GenSubtargetInfo {
+  // Optional SoC blocks.  These start false because the generated
+  // ParseSubtargetFeatures only ever sets a field to true -- it has no way to
+  // clear one -- so the default has to come from the processor instead.  An
+  // absent -mcpu is mapped to "generic", which has both.
+  bool HasMul = false;
+  bool HasDiv = false;
+
   // Declaration order is construction order.  RegInfo has to come before
   // TLInfo, because UG24TargetLowering's constructor calls
   // computeRegisterProperties(Subtarget.getRegisterInfo()) -- reading a member
@@ -37,6 +44,15 @@ class UG24Subtarget : public UG24GenSubtargetInfo {
 public:
   UG24Subtarget(const Triple &TT, const std::string &CPU,
                 const std::string &FS, const TargetMachine &TM);
+
+  /// Apply \p CPU and \p FS to the feature bits.  Called from the
+  /// constructor's initialiser list, before UG24TargetLowering is built,
+  /// because the lowering reads hasMul()/hasDiv() while deciding which
+  /// operations become libcalls.
+  UG24Subtarget &initializeSubtargetDependencies(StringRef CPU, StringRef FS);
+
+  bool hasMul() const { return HasMul; }
+  bool hasDiv() const { return HasDiv; }
 
   const UG24InstrInfo *getInstrInfo() const override { return &InstrInfo; }
   const UG24FrameLowering *getFrameLowering() const override {

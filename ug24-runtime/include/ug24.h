@@ -26,6 +26,47 @@ typedef signed short   ug24_s16;
 #define UG24_UART_READY  0x01
 
 //===----------------------------------------------------------------------===//
+// Interrupt controller
+//===----------------------------------------------------------------------===//
+//
+// Everything in this section rests on the interrupt model described under
+// "Interrupts" in docs/uG24-assumptions.md: the specification to hand names
+// the PSW enable bits but not the vector table or the controller registers.
+//
+// Writing a handler:
+//
+//     __attribute__((interrupt)) void __ug24_irq(void) {
+//         ticks++;
+//         UG24_IRQ_STATUS = UG24_IRQ_TIMER;   // clear the source
+//     }
+//
+// The name is what wires it to a vector: crt0's table jumps to the weak
+// symbols __ug24_nmi, __ug24_irq and __ug24_swi, and a definition here
+// replaces the default handler.  The attribute is what makes the function
+// preserve every register it touches and return through PSW and PC.
+
+#define UG24_IRQ_STATUS  (*(volatile unsigned char *)0xFF10)
+#define UG24_IRQ_ENABLE  (*(volatile unsigned char *)0xFF11)
+#define UG24_IRQ_RAISE   (*(volatile unsigned char *)0xFF12)
+#define UG24_TIMER_LOAD  (*(volatile unsigned char *)0xFF13)
+
+/// Interrupt sources, as bits in UG24_IRQ_STATUS and UG24_IRQ_ENABLE.
+#define UG24_IRQ_TIMER   0x01
+#define UG24_IRQ_SW      0x02
+
+/// Let maskable interrupts through: PSW.IE and PSW.ME both set.  There is no
+/// SETF instruction, so each bit is cleared and then inverted.
+static inline void ug24_enable_interrupts(void) {
+    __asm__ __volatile__("clrf 15\n\tinvf 15\n\tclrf 14\n\tinvf 14"
+                         ::: "memory");
+}
+
+/// Block maskable interrupts by clearing PSW.IE.
+static inline void ug24_disable_interrupts(void) {
+    __asm__ __volatile__("clrf 15" ::: "memory");
+}
+
+//===----------------------------------------------------------------------===//
 // Console output
 //===----------------------------------------------------------------------===//
 

@@ -6,6 +6,40 @@
 ;
 ;===--------------------------------------------------------------------===;
 
+	;--------------------------------------------------------------------
+	; Vector table.  Each slot is one LJA, which is four bytes wide, so
+	; the table is a run of jumps rather than a table of addresses and the
+	; core simply starts executing at slot 0 out of reset.
+	;
+	; Where the table lives, and which source owns which slot, is an
+	; assumption -- see "Interrupts" in docs/uG24-assumptions.md.  The
+	; handlers are weak, so defining __ug24_irq (with
+	; __attribute__((interrupt))) in a C file replaces the default one.
+	;--------------------------------------------------------------------
+	.section .text.vectors,"ax",@progbits
+	.globl	__ug24_vectors
+__ug24_vectors:
+	lja	_start			; 0x0000 reset
+	lja	__ug24_nmi		; 0x0004 non-maskable
+	lja	__ug24_irq		; 0x0008 maskable
+	lja	__ug24_swi		; 0x000c software
+
+	.section .text.default_isr,"ax",@progbits
+	.weak	__ug24_nmi
+	.weak	__ug24_irq
+	.weak	__ug24_swi
+	.type	__ug24_default_isr,@function
+__ug24_nmi:
+__ug24_irq:
+__ug24_swi:
+__ug24_default_isr:
+	; Undo what the hardware pushed and carry on.  A program that enables
+	; a source without defining its handler ends up here, which loses the
+	; interrupt rather than running off into whatever follows.
+	pop	psw
+	pop	pc
+	.size	__ug24_default_isr, .-__ug24_default_isr
+
 	.text
 	.globl	_start
 	.type	_start,@function

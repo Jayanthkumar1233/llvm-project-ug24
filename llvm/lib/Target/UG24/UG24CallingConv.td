@@ -39,7 +39,12 @@ def CC_UG24 : CallingConv<[
 def RetCC_UG24 : CallingConv<[
   CCIfType<[i1], CCPromoteToType<i8>>,
   CCIfType<[i8],  CCAssignToReg<[R0, R1]>>,
-  CCIfType<[i16], CCAssignToReg<[W, DPTR1]>>
+
+  // Four pairs, because a 64-bit return is legalised into four i16 pieces and
+  // a return value has nowhere to spill to.  W and DPTR1 come first so that
+  // the common 16- and 32-bit cases keep the registers they had before;
+  // P0 and P1 are the caller-saved argument pairs and are free by then.
+  CCIfType<[i16], CCAssignToReg<[W, DPTR1, P0, P1]>>
 ]>;
 
 // R4-R7 and R10 are preserved across calls.  R11 and DPTR0 are reserved and

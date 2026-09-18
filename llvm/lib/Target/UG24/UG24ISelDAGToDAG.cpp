@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "UG24.h"
+#include "UG24Subtarget.h"
 #include "UG24TargetMachine.h"
 #include "llvm/CodeGen/SelectionDAGISel.h"
 #include "llvm/Support/Compiler.h"
@@ -19,11 +20,20 @@ using namespace llvm;
 
 namespace {
 class UG24DAGToDAGISel : public SelectionDAGISel {
+  /// The patterns gated on the optional multiplier and divider are emitted as
+  /// "Subtarget->hasMul()", so the generated matcher needs one to ask.
+  const UG24Subtarget *Subtarget = nullptr;
+
 public:
   static char ID;
 
   UG24DAGToDAGISel(UG24TargetMachine &TM, CodeGenOpt::Level OptLevel)
       : SelectionDAGISel(ID, TM, OptLevel) {}
+
+  bool runOnMachineFunction(MachineFunction &MF) override {
+    Subtarget = &MF.getSubtarget<UG24Subtarget>();
+    return SelectionDAGISel::runOnMachineFunction(MF);
+  }
 
   StringRef getPassName() const override {
     return "UG24 DAG->DAG Pattern Instruction Selection";

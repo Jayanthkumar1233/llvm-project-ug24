@@ -1,0 +1,5 @@
+software 121
+accumulator 26
+timer 4
+masked 121 pending 2
+PASS - interrupts

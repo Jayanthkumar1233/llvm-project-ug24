@@ -52,7 +52,10 @@ static MCRegisterInfo *createUG24MCRegisterInfo(const Triple &TT) {
 static MCSubtargetInfo *createUG24MCSubtargetInfo(const Triple &TT,
                                                    StringRef CPU,
                                                    StringRef FS) {
-  return createUG24MCSubtargetInfoImpl(TT, CPU, /*TuneCPU=*/CPU, FS);
+  // An empty -mcpu means the default part, which has both optional
+  // arithmetic blocks; leaving it empty would make the assembler reject "mul".
+  StringRef CPUName = CPU.empty() ? StringRef("generic") : CPU;
+  return createUG24MCSubtargetInfoImpl(TT, CPUName, /*TuneCPU=*/CPUName, FS);
 }
 
 static MCInstPrinter *createUG24MCInstPrinter(const Triple &T,

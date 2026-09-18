@@ -177,6 +177,34 @@ static uint64_t resolveMSP430(uint64_t Type, uint64_t Offset, uint64_t S,
   }
 }
 
+// Only the plain data relocations are resolvable here.  The rest of the uG24
+// set patches fields inside a 16-bit instruction word, which is not what a
+// generic consumer such as llvm-dwarfdump is ever asked to relocate.
+static bool supportsUG24(uint64_t Type) {
+  switch (Type) {
+  case ELF::R_UG24_8:
+  case ELF::R_UG24_16:
+  case ELF::R_UG24_32:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static uint64_t resolveUG24(uint64_t Type, uint64_t Offset, uint64_t S,
+                            uint64_t /*LocData*/, int64_t Addend) {
+  switch (Type) {
+  case ELF::R_UG24_8:
+    return (S + Addend) & 0xFF;
+  case ELF::R_UG24_16:
+    return (S + Addend) & 0xFFFF;
+  case ELF::R_UG24_32:
+    return (S + Addend) & 0xFFFFFFFF;
+  default:
+    llvm_unreachable("Invalid relocation type");
+  }
+}
+
 static bool supportsPPC64(uint64_t Type) {
   switch (Type) {
   case ELF::R_PPC64_ADDR32:
@@ -832,6 +860,8 @@ getRelocationResolver(const ObjectFile &Obj) {
       return {supportsMips32, resolveMips32};
     case Triple::msp430:
       return {supportsMSP430, resolveMSP430};
+    case Triple::ug24:
+      return {supportsUG24, resolveUG24};
     case Triple::sparc:
       return {supportsSparc32, resolveSparc32};
     case Triple::hexagon:

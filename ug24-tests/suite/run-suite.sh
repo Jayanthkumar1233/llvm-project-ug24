@@ -13,7 +13,7 @@ ROOT=$(cd "$DIR/../.." && pwd)
 # layout put it.  UG24_BUILD overrides both.
 if [ -n "$UG24_BUILD" ]; then
     BIN="$UG24_BUILD/bin"
-elif [ -x "$BIN/clang" ]; then
+elif [ -x "$ROOT/build-ug24/bin/clang" ]; then
     BIN="$ROOT/build-ug24/bin"
 elif [ -x "$ROOT/../build-ug24/bin/clang" ]; then
     BIN="$ROOT/../build-ug24/bin"
@@ -23,9 +23,12 @@ else
     echo "  build it with ./ug24-setup.sh, or set UG24_BUILD=/path/to/build" >&2
     exit 1
 fi
-SIM_BIN="$SIM_BIN"
+# The simulator lives in this repository.  The path above it is only there
+# for the older layout, where sim, runtime and tests sat beside llvm-project
+# rather than inside it; an out-of-date copy there must not win.
+[ -x "$SIM_BIN" ] || SIM_BIN="$ROOT/ug24-sim/ug24sim"
 [ -x "$SIM_BIN" ] || SIM_BIN="$ROOT/../ug24-sim/ug24sim"
-
+[ -x "$SIM_BIN" ] || { echo "$0: no simulator; run ./ug24-setup.sh" >&2; exit 1; }
 
 
 SIM="$SIM_BIN"

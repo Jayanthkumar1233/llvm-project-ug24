@@ -34,6 +34,10 @@ SECTIONS
 {
   .text 0x0000 :
   {
+    /* KEEP: nothing references the vector table, so --gc-sections would
+     * otherwise drop the entry point along with every interrupt handler. */
+    KEEP(*(.text.vectors))
+    KEEP(*(.text.default_isr))
     *(.text.start)
     *(.text .text.*)
     *(.rodata .rodata.*)

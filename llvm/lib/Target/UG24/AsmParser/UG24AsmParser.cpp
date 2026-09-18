@@ -9,6 +9,7 @@
 #include "MCTargetDesc/UG24MCExpr.h"
 #include "MCTargetDesc/UG24MCTargetDesc.h"
 #include "TargetInfo/UG24TargetInfo.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
@@ -59,6 +60,32 @@ public:
   bool isReg() const override { return Kind == k_Register; }
   bool isImm() const override { return Kind == k_Immediate; }
   bool isMem() const override { return false; }
+
+  /// An immediate whose value is either unknown or inside [Lo, Hi].
+  ///
+  /// A symbolic expression is accepted unconditionally: nothing here knows
+  /// where the symbol will land, and UG24AsmBackend range-checks the value
+  /// when it applies the fixup.
+  bool isImmInRange(int64_t Lo, int64_t Hi) const {
+    if (Kind != k_Immediate)
+      return false;
+    const auto *CE = dyn_cast<MCConstantExpr>(Imm.Val);
+    if (!CE)
+      return true;
+    int64_t Val = CE->getValue();
+    return Val >= Lo && Val <= Hi;
+  }
+
+  // The Format I immediate field is eight bits wide and the instructions that
+  // use it are a mix of signed (ADI, SBI) and unsigned (MVI, ANDI) readings,
+  // so both spellings of a byte are in range.
+  bool isImm8() const { return isImmInRange(-128, 255); }
+  bool isUImm8() const { return isImmInRange(0, 255); }
+  bool isUImm7() const { return isImmInRange(0, 127); }
+  bool isUImm4() const { return isImmInRange(0, 15); }
+  // INC/DEC and the shifts encode "amount - 1", so zero is not expressible.
+  bool isIncImm() const { return isImmInRange(1, 16); }
+  bool isShiftImm() const { return isImmInRange(1, 8); }
 
   SMLoc getStartLoc() const override { return StartLoc; }
   SMLoc getEndLoc() const override { return EndLoc; }
@@ -139,6 +166,8 @@ class UG24AsmParser : public MCTargetAsmParser {
 
   bool parseOperand(OperandVector &Operands);
   bool parseExpressionWithModifier(const MCExpr *&Res);
+  bool immRangeError(const OperandVector &Operands, uint64_t ErrorInfo,
+                     int64_t Lo, int64_t Hi);
 
 public:
   UG24AsmParser(const MCSubtargetInfo &STI, MCAsmParser &Parser,
@@ -159,6 +188,15 @@ public:
                                OperandVector &Operands, MCStreamer &Out,
                                uint64_t &ErrorInfo,
                                bool MatchingInlineAsm) override;
+
+  // One Match_Invalid* per DiagnosticType in UG24InstrInfo.td, generated from
+  // the parser match classes.
+  enum UG24MatchResultTy {
+    Match_Dummy = FIRST_TARGET_MATCH_RESULT_TY,
+#define GET_OPERAND_DIAGNOSTIC_TYPES
+#include "UG24GenAsmMatcher.inc"
+#undef GET_OPERAND_DIAGNOSTIC_TYPES
+  };
 };
 
 } // namespace
@@ -290,6 +328,15 @@ bool UG24AsmParser::ParseInstruction(ParseInstructionInfo &Info,
   return false;
 }
 
+bool UG24AsmParser::immRangeError(const OperandVector &Operands,
+                                  uint64_t ErrorInfo, int64_t Lo, int64_t Hi) {
+  SMLoc Loc = ErrorInfo < Operands.size()
+                  ? ((UG24Operand &)*Operands[ErrorInfo]).getStartLoc()
+                  : ((UG24Operand &)*Operands[0]).getStartLoc();
+  return Error(Loc, "immediate must be an integer in the range [" + Twine(Lo) +
+                        ", " + Twine(Hi) + "]");
+}
+
 bool UG24AsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
                                             OperandVector &Operands,
                                             MCStreamer &Out,
@@ -307,6 +354,23 @@ bool UG24AsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
     return false;
   case Match_MnemonicFail:
     return Error(IDLoc, "invalid instruction mnemonic");
+  case Match_MissingFeature:
+    // The only predicated instructions are MUL and DIV, whose blocks are
+    // optional in the SoC configuration.
+    return Error(IDLoc, "instruction requires an optional block that this "
+                        "-mcpu or -mattr leaves out");
+  case Match_InvalidImm8:
+    return immRangeError(Operands, ErrorInfo, -128, 255);
+  case Match_InvalidUImm8:
+    return immRangeError(Operands, ErrorInfo, 0, 255);
+  case Match_InvalidUImm7:
+    return immRangeError(Operands, ErrorInfo, 0, 127);
+  case Match_InvalidUImm4:
+    return immRangeError(Operands, ErrorInfo, 0, 15);
+  case Match_InvalidIncImm:
+    return immRangeError(Operands, ErrorInfo, 1, 16);
+  case Match_InvalidShiftImm:
+    return immRangeError(Operands, ErrorInfo, 1, 8);
   case Match_InvalidOperand: {
     SMLoc ErrorLoc = IDLoc;
     if (ErrorInfo != ~0ULL) {

@@ -9,6 +9,7 @@
 #ifndef LLVM_LIB_TARGET_UG24_UG24MACHINEFUNCTIONINFO_H
 #define LLVM_LIB_TARGET_UG24_UG24MACHINEFUNCTIONINFO_H
 
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/CodeGen/MachineFunction.h"
 
 namespace llvm {
@@ -16,6 +17,12 @@ namespace llvm {
 class UG24MachineFunctionInfo : public MachineFunctionInfo {
   /// Frame index of the first variadic argument.
   int VarArgsFrameIndex = 0;
+
+  /// Registers an interrupt handler's prologue pushes and its epilogue pops,
+  /// in push order.  Empty in an ordinary function.  Filled in by
+  /// UG24FrameLowering::determineCalleeSaves, which is the last point at
+  /// which register liveness is still tracked.
+  SmallVector<MCRegister, 8> InterruptSaves;
 
 public:
   explicit UG24MachineFunctionInfo(const Function &F,
@@ -30,6 +37,9 @@ public:
 
   int getVarArgsFrameIndex() const { return VarArgsFrameIndex; }
   void setVarArgsFrameIndex(int Index) { VarArgsFrameIndex = Index; }
+
+  ArrayRef<MCRegister> getInterruptSaves() const { return InterruptSaves; }
+  void addInterruptSave(MCRegister Reg) { InterruptSaves.push_back(Reg); }
 };
 
 } // namespace llvm

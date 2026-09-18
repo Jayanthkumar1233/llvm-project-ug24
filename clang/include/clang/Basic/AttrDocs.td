@@ -2375,6 +2375,29 @@ of the type before passing to the attribute.
 }];
 }
 
+def UG24InterruptDocs : Documentation {
+  let Category = DocCatFunction;
+  let Heading = "interrupt (uG24)";
+  let Content = [{
+Clang supports the GNU style ``__attribute__((interrupt))`` attribute on uG24
+targets. This attribute may be attached to a function definition and instructs
+the backend to generate appropriate function entry/exit code so that it can be
+used directly as an interrupt service routine.
+
+A uG24 interrupt is entered by the hardware rather than by a call, so the
+handler preserves every register it writes, including the ones an ordinary
+function is free to clobber, and returns by restoring ``PSW`` and popping the
+interrupted ``PC`` rather than by ``RET``.
+
+The handler is wired to a vector by its name: the reset vector table in
+``crt0.s`` jumps to the weak symbols ``__ug24_nmi``, ``__ug24_irq`` and
+``__ug24_swi``, so defining a function with one of those names replaces the
+default handler for that source.
+
+Interrupt handler functions must have a prototype of ``void f(void)``.
+  }];
+}
+
 def AVRInterruptDocs : Documentation {
   let Category = DocCatFunction;
   let Heading = "interrupt (AVR)";

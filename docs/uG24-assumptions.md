@@ -43,6 +43,16 @@ instructions but no C ABI, so this one is invented.
 ### Return values
 - 8-bit values in `R0`.
 - 16-bit values in `W`.
+- 32-bit values in `W` and `DPTR1`, 64-bit values in `W`, `DPTR1`, `P0` and
+  `P1`. A return value has nowhere to spill to, so four pairs is the limit;
+  anything wider, and every aggregate, is returned through a hidden pointer
+  the caller passes as a first argument.
+- Aggregate arguments are passed by reference, with the caller owning the
+  copy. The uG24 has no block move, so pushing a struct a byte at a time at
+  every call site costs more code than the copy the callee would have made.
+
+`clang/lib/CodeGen/Targets/UG24.cpp` is where this is written down on the
+Clang side; `UG24CallingConv.td` assigns the registers on the backend side.
 
 Clang's generic code would otherwise widen an `i8` return to the register type
 of `i32`, which on this target is `i16`; `UG24TargetLowering::getTypeForExtReturn`
@@ -59,7 +69,13 @@ overrides that so definitions and call sites agree.
     base from `DPTR0` (when `PSW.DP` is clear) rather than from an encoded
     operand, so dedicating the pair avoids shuffling a pointer into place
     around every memory access.
-- There is **no frame pointer**. Every frame slot is addressed from `SP`.
+- **Frame pointer:** `P3` (`R7:R6`), and only in a function that needs one —
+  one with a variable-length array, an `alloca`, or a taken frame address.
+  Everything else addresses its frame from `SP` and leaves `P3` to the
+  allocator. `UG24FrameLowering::hasFP` is the single place that decides.
+  The frame pointer is set to the stack pointer *after* the locals are
+  allocated, so that every frame offset is a non-negative displacement: `LD`
+  and `ST` have no signed form.
 
 ### Return address
 `RA` is a single register with no hardware stack, so a function that makes any
@@ -164,14 +180,140 @@ division) goes to the software helpers in `ug24-runtime/`.
 
 ### 3.8 Software floating point and wide integers
 `float`, `double`, `i32` and `i64` arithmetic are lowered to compiler-rt style
-calls. `ug24-runtime/ug24_builtins.c` implements the 8- and 16-bit helpers the
-backend actually emits; the 32-bit and floating-point helpers are **not yet
-provided**, so code using them will fail to link with an undefined symbol
-rather than misbehave.
+calls, provided by `ug24-runtime/`:
+
+| File | Helpers |
+| :--- | :--- |
+| `ug24_builtins.c` | 8-, 16- and 32-bit shift, multiply, divide, remainder; `mem*`/`str*` |
+| `ug24_int64.c` | `__muldi3`, `__udivdi3`, `__umoddi3`, `__divdi3`, `__moddi3`, the 64-bit shifts, `__cmpdi2`, `__ucmpdi2` |
+| `ug24_float.c` | the single-precision set: `__addsf3`, `__subsf3`, `__mulsf3`, `__divsf3`, the six comparisons, `__unordsf2`, and the conversions to and from 32- and 64-bit integers |
+| `ug24_setjmp.s` | `setjmp`, `longjmp` |
+
+`double` and `long double` are IEEE **single** on this target, the same choice
+AVR makes, so the double-precision half of the soft-float library does not
+exist and is never asked for: there is no `__adddf3` and no `__extendsfdf2`.
+
+Rounding is IEEE round-to-nearest, ties to even. `printf`'s `%f`, `%e` and
+`%g` produce their digits by repeated
+multiplication by ten in single precision, so beyond about seven significant
+digits the last one may be off by one — which is all the precision a `float`
+carries anyway.
+
+`%a` is not implemented; it prints `<fp?>` and consumes its argument.
+
+The `printf` float formatter lives in `ug24_float.c` rather than in
+`ug24_stdio.c`, and `ug24_stdio.c` declares it **weak and does not define
+it**. An undefined weak symbol does not make the linker pull a member out of
+`libug24.a`, so a program that never does any floating-point arithmetic
+leaves it null and `%f` prints `<fp?>`; a program that does any at all has
+already pulled `ug24_float.c` in for `__addsf3` and the symbol resolves.
+
+That matters because the difference is not small. `printf("Hello ug24\n")`
+is 300 bytes. The same program with a `%f` and a float to put through it is
+about 25 KB, once the soft-float library, the 64-bit division behind the
+decimal conversion and the 4.5 KB formatter are all linked. On a 64 KB part
+that is worth not paying for by default.
+
+The gap is a program that prints a floating-point *constant* and does no
+arithmetic, where the optimiser has folded everything away before the linker
+sees it. Link that with `-Wl,-u,__ug24_format_float`: an explicit undefined
+symbol is a strong one and does pull the member in.
+
+### 3.9 Optional multiplier and divider
+`MUL` and `DIV` are optional blocks in the SoC configuration. They are present
+on the part this toolchain was written against, so the `mul` and `div`
+subtarget features default to on; `-mcpu=ug24-base`, or
+`-Xclang -target-feature -Xclang -mul`, describes a part without them, and the
+same operations then become calls to the runtime helpers. Those helpers are
+shift-and-add loops and need no hardware block of their own, so the runtime
+library does not have to be rebuilt to match. `__UG24_HAS_MUL__` and
+`__UG24_HAS_DIV__` are defined when the blocks are present.
+
+With the feature off, `mul` is not a recognised instruction in assembly
+either — the `AssemblerPredicate` rejects it rather than encoding something
+the part cannot execute.
 
 ---
 
-## 4. Memory map
+## 4. Interrupts
+
+**Everything in this section is an assumption.** The `PSW` layout names five
+interrupt bits — `IE` (15), `ME` (14), `SE` (13), `NMI` (12), `MI` (11) — but
+the documents to hand do not say where the vector table lives, what the
+hardware pushes on entry, or which peripheral owns which source. Specification
+queries A1 and A6 ask for exactly that. Until they are answered, the toolchain,
+the runtime and the simulator implement the model below, which uses only
+instructions and `PSW` bits the specification does define.
+
+### Vector table
+Four slots at address `0x0000`, each one `LJA`, which is four bytes wide. The
+table is a run of jumps rather than a table of addresses, so the core simply
+starts executing at slot 0 out of reset — which is what the existing "reset
+`PC` is the base of `.text`" assumption already required.
+
+| Address | Source | Symbol |
+| :--- | :--- | :--- |
+| `0x0000` | reset | `_start` |
+| `0x0004` | non-maskable | `__ug24_nmi` |
+| `0x0008` | maskable | `__ug24_irq` |
+| `0x000C` | software | `__ug24_swi` |
+
+The three handler symbols are **weak** definitions in `crt0.s` that undo what
+the hardware pushed and resume, so an enabled source with no handler loses the
+interrupt rather than running off into whatever follows. Defining a function
+with one of those names replaces the default.
+
+### Entry and exit
+Taking an interrupt pushes the interrupted `PC`, then `PSW`, clears `PSW.IE`
+so the handler is not immediately re-entered, sets `PSW.MI`, and jumps to the
+vector. The handler returns with `POP PSW` followed by `POP PC`; `PSW` comes
+back with `IE` as it was, so interrupts re-enable on return. There is no
+`RETI` instruction in the ISA and none is invented.
+
+### Writing a handler
+`__attribute__((interrupt))` on a `void f(void)`:
+
+```c
+#include <ug24.h>
+
+static volatile unsigned ticks;
+
+__attribute__((interrupt)) void __ug24_irq(void) {
+    ticks++;
+    UG24_IRQ_STATUS = UG24_IRQ_TIMER;   /* clear the source */
+}
+```
+
+The attribute changes two things. The prologue preserves every register the
+handler writes, caller-saved ones included — a handler preempts code that
+expects all of them back — and `R11` and `DPTR0` with them, which are reserved
+and so invisible to the generic callee-saved machinery. `UG24ExpandPseudo`
+then replaces `RET` with the `POP PSW` / `POP PC` pair. A handler that calls
+another function saves everything, since it cannot know what the callee
+writes.
+
+### Controller registers
+The simulator models a small controller in the MMIO page. Like the rest of
+this section it is a placeholder for whatever the SoC actually decodes.
+
+| Address | Register |
+| :--- | :--- |
+| `0xFF10` | `IRQ_STATUS` — read pending sources, write 1-bits to clear |
+| `0xFF11` | `IRQ_ENABLE` — per-source enable mask |
+| `0xFF12` | `IRQ_RAISE` — write a source number to raise it by hand |
+| `0xFF13` | `TIMER_LOAD` — instructions between timer ticks, 0 disables |
+
+Source bit 0 is the timer and bit 1 is software. `ug24_enable_interrupts()`
+in `ug24.h` sets `PSW.IE` and `PSW.ME`; because the ISA has no `SETF`, each
+bit is cleared and then inverted.
+
+`WFI` waits rather than halts when an interrupt can still arrive, and halts
+otherwise — which is what `crt0`'s halt loop, reached with interrupts off,
+relies on.
+
+---
+
+## 5. Memory map
 
 The reset `PC` and `SP` are strapped inputs on real hardware, and the
 instruction/data TCM sizes are per-SoC parameters. `ug24-runtime/ug24.ld`

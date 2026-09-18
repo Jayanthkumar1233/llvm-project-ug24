@@ -53,6 +53,15 @@ BitVector UG24RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   // DPTR0 (R15:R14) is the dedicated memory base register.
   Reserved.set(UG24::R14);
   Reserved.set(UG24::R15);
+
+  // P3 becomes the frame pointer in a function with a variable-sized object,
+  // so the allocator must not hand it out there.  Every other function keeps
+  // it, which matters on a machine with ten allocatable bytes.
+  if (MF.getSubtarget().getFrameLowering()->hasFP(MF)) {
+    Reserved.set(UG24::R6);
+    Reserved.set(UG24::R7);
+    Reserved.set(UG24::P3);
+  }
   Reserved.set(UG24::DPTR0);
 
   return Reserved;
@@ -67,8 +76,6 @@ Register UG24RegisterInfo::getFrameRegister(const MachineFunction &MF) const {
 bool UG24RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
                                            int SPAdj, unsigned FIOperandNum,
                                            RegScavenger *RS) const {
-  assert(SPAdj == 0 && "uG24 does not adjust SP mid-call-sequence");
-
   MachineInstr &MI = *II;
   MachineBasicBlock &MBB = *MI.getParent();
   MachineFunction &MF = *MBB.getParent();
@@ -82,12 +89,20 @@ bool UG24RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   // one into a displacement from the final SP means adding back the frame
   // size.  Incoming arguments live above the saved return address, so they
   // also have to step over it; locals sit below it and do not.
+  bool UseFP = TFI.hasFP(MF);
   unsigned RASave = UG24FrameLowering::getRASaveSize(MF);
+  unsigned FPSave = UG24FrameLowering::getFPSaveSize(MF);
   int64_t Offset = MFI.getObjectOffset(FrameIndex) +
                    MFI.getStackSize() +
-                   (MFI.isFixedObjectIndex(FrameIndex) ? RASave : 0) +
+                   (MFI.isFixedObjectIndex(FrameIndex) ? RASave + FPSave : 0) +
                    MI.getOperand(FIOperandNum + 1).getImm();
-  (void)TFI;
+
+  // Without a frame pointer the base is SP, so a call sequence that has
+  // pushed arguments shifts every offset; with one, SP is irrelevant.
+  if (!UseFP)
+    Offset += SPAdj;
+  else
+    assert(SPAdj == 0 || true);
 
   assert(Offset >= 0 && "frame slot lies below the stack pointer");
 
@@ -96,7 +111,12 @@ bool UG24RegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
   // Point DPTR0 at the stack frame.  Displacements up to 255 are folded into
   // the LD/ST itself; anything larger is added into DPTR0 first.
-  BuildMI(MBB, II, DL, TII.get(UG24::MOVXSP), UG24::DPTR0);
+  if (UseFP) {
+    BuildMI(MBB, II, DL, TII.get(UG24::MOV), UG24::R14).addReg(UG24::R6);
+    BuildMI(MBB, II, DL, TII.get(UG24::MOV), UG24::R15).addReg(UG24::R7);
+  } else {
+    BuildMI(MBB, II, DL, TII.get(UG24::MOVXSP), UG24::DPTR0);
+  }
 
   bool Is16 = MI.getOpcode() == UG24::LDFI16 || MI.getOpcode() == UG24::STFI16;
   int64_t Disp = Offset;

@@ -7592,6 +7592,21 @@ static void handleAVRInterruptAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   handleSimpleAttribute<AVRInterruptAttr>(S, D, AL);
 }
 
+static void handleUG24InterruptAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+  // The handler is reached through a vector rather than a call, so it can
+  // neither take arguments nor return a value.
+  if (!isFunctionOrMethod(D)) {
+    S.Diag(D->getLocation(), diag::warn_attribute_wrong_decl_type)
+        << AL << AL.isRegularKeywordAttribute() << ExpectedFunction;
+    return;
+  }
+
+  if (!AL.checkExactlyNumArgs(S, 0))
+    return;
+
+  handleSimpleAttribute<UG24InterruptAttr>(S, D, AL);
+}
+
 static void handleAVRSignalAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   if (!isFunctionOrMethod(D)) {
     S.Diag(D->getLocation(), diag::warn_attribute_wrong_decl_type)
@@ -7821,6 +7836,9 @@ static void handleInterruptAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
     break;
   case llvm::Triple::avr:
     handleAVRInterruptAttr(S, D, AL);
+    break;
+  case llvm::Triple::ug24:
+    handleUG24InterruptAttr(S, D, AL);
     break;
   case llvm::Triple::riscv32:
   case llvm::Triple::riscv64:

@@ -83,9 +83,34 @@ def UG24setcc16 : SDNode<"UG24ISD::SETCC16", SDT_UG24SetCC16>;
 // Operands and immediate predicates
 //===----------------------------------------------------------------------===//
 
+// Immediate range checking for hand-written assembly.
+//
+// The instruction selector only ever produces immediates that fit, because the
+// ImmLeaf predicates below gate every pattern.  An assembly file has nothing
+// gating it, so without a parser match class the matcher accepts any integer
+// and the encoder quietly drops the bits that do not fit -- "adi r0, 4660"
+// assembling as "adi r0, 52".  Each class names a predicate on UG24Operand and
+// a diagnostic that MatchAndEmitInstruction turns into a range message.
+//
+// A symbolic expression passes every one of these: its value is not known
+// until the fixup is applied, and the asm backend range-checks it there.
+class UG24ImmAsmOperand<string name, string diag> : AsmOperandClass {
+  let Name = name;
+  let RenderMethod = "addImmOperands";
+  let DiagnosticType = diag;
+}
+
+def Imm8AsmOperand      : UG24ImmAsmOperand<"Imm8",      "InvalidImm8">;
+def UImm8AsmOperand     : UG24ImmAsmOperand<"UImm8",     "InvalidUImm8">;
+def UImm7AsmOperand     : UG24ImmAsmOperand<"UImm7",     "InvalidUImm7">;
+def UImm4AsmOperand     : UG24ImmAsmOperand<"UImm4",     "InvalidUImm4">;
+def IncImmAsmOperand    : UG24ImmAsmOperand<"IncImm",    "InvalidIncImm">;
+def ShiftImmAsmOperand  : UG24ImmAsmOperand<"ShiftImm",  "InvalidShiftImm">;
+
 // Unsigned 8-bit immediate, as carried by every Format I instruction.
 def imm8 : Operand<i8>, ImmLeaf<i8, [{ return isUInt<8>(Imm & 0xff); }]> {
   let PrintMethod = "printImm8";
+  let ParserMatchClass = Imm8AsmOperand;
 }
 
 // INC/DEC encode "amount - 1" in four bits, so the assembly-level range is
@@ -96,6 +121,7 @@ def inc_imm : Operand<i8>, ImmLeaf<i8, [{
   let EncoderMethod = "getImmMinus1OpValue";
   let DecoderMethod = "decodeImmPlus1Operand<4>";
   let PrintMethod = "printImmOperand";
+  let ParserMatchClass = IncImmAsmOperand;
 }
 
 // Shifts encode "amount - 1" in three bits: assembly range 1..8.
@@ -105,16 +131,19 @@ def shift_imm : Operand<i8>, ImmLeaf<i8, [{
   let EncoderMethod = "getImmMinus1OpValue";
   let DecoderMethod = "decodeImmPlus1Operand<3>";
   let PrintMethod = "printImmOperand";
+  let ParserMatchClass = ShiftImmAsmOperand;
 }
 
 // PSW bit index for CLRF / INVF.
 def flag_imm : Operand<i8>, ImmLeaf<i8, [{ return isUInt<4>(Imm); }]> {
   let PrintMethod = "printImmOperand";
+  let ParserMatchClass = UImm4AsmOperand;
 }
 
 // 7-bit immediate for the register-indirect jumps.
 def imm7 : Operand<i16>, ImmLeaf<i16, [{ return isUInt<7>(Imm); }]> {
   let PrintMethod = "printImmOperand";
+  let ParserMatchClass = UImm7AsmOperand;
 }
 
 // PC-relative branch target.  The encoded field is a signed count of
@@ -135,6 +164,7 @@ def calltarget : Operand<i16> {
 // The 8-bit displacement of an LD/ST, printed as "[imm]".
 def memdisp : Operand<i8> {
   let PrintMethod = "printMemDisp";
+  let ParserMatchClass = UImm8AsmOperand;
 }
 
 // Addressing modes.  A frame slot is reached through the SP-relative pseudo;
@@ -296,10 +326,15 @@ def SWAP : FP_RR<0b0010, (outs), (ins GPR:$rs1, GPR:$rs2),
 
 // MUL writes the 16-bit product to W; DIV writes quotient to W.lo and
 // remainder to W.hi.  Neither result is an encoded operand.
+// Both are optional blocks in the SoC configuration, so each carries the
+// predicate for its feature: -mattr=-mul makes "mul" an unrecognised
+// instruction in assembly as well as unavailable to the selector.
 let Defs = [W, PSW] in {
+let Predicates = [HasMul] in
 def MUL : FP_RR<0b0100, (outs), (ins GPR:$rs1, GPR:$rs2),
                 "mul\t$rs1, $rs2", []>;
 
+let Predicates = [HasDiv] in
 def DIV : FP_RR<0b0101, (outs), (ins GPR:$rs1, GPR:$rs2),
                 "div\t$rs1, $rs2", []>;
 }
@@ -472,6 +507,7 @@ def XOR16 : UG24Inst16<(outs GPR16:$rd), (ins GPR16:$src, GPR16:$rs),
 // an encoded destination, so they are selected as pseudos carrying an
 // ordinary destination operand and split after register allocation.
 let isPseudo = 1, isCodeGenOnly = 1, Defs = [W, PSW] in {
+let Predicates = [HasMul] in
 def MULW : UG24Inst16<(outs GPR16:$dst), (ins GPR:$a, GPR:$b),
                       "#MULW $dst, $a, $b",
                       [(set GPR16:$dst, (UG24mulw GPR:$a, GPR:$b))]>;
@@ -593,14 +629,17 @@ def : Pat<(UG24wrapper texternalsym:$addr),  (MVI16 texternalsym:$addr)>;
 def : Pat<(sub 0, GPR:$rs), (ADI (NOT GPR:$rs), 1)>;
 
 // An 8-bit multiply is the low half of the hardware 8x8 -> 16 product.
+let Predicates = [HasMul] in
 def : Pat<(i8 (mul GPR:$a, GPR:$b)),
           (EXTRACT_SUBREG (MULW GPR:$a, GPR:$b), sub_lo)>;
 
 // Unsigned 8-bit divide and remainder come out of one DIV.
+let Predicates = [HasDiv] in {
 def : Pat<(i8 (udiv GPR:$a, GPR:$b)),
           (EXTRACT_SUBREG (DIVW GPR:$a, GPR:$b), sub_lo)>;
 def : Pat<(i8 (urem GPR:$a, GPR:$b)),
           (EXTRACT_SUBREG (DIVW GPR:$a, GPR:$b), sub_hi)>;
+}
 
 //===----------------------------------------------------------------------===//
 // Width conversions

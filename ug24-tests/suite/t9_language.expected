@@ -17,6 +17,7 @@ ternary: 12
 comma: 17
 array: 9 5 8
 pointer: 0 16 4 0
+vla: 1 4
 struct: 0 3 7 10
 union: BEEF BE EF
 bitfield: 1 5

@@ -15,6 +15,7 @@
 
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/TargetOptions.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/TargetParser/Triple.h"
 
@@ -23,6 +24,14 @@ namespace targets {
 
 class LLVM_LIBRARY_VISIBILITY UG24TargetInfo : public TargetInfo {
   static const char *const GCCRegNames[];
+
+  // The multiplier and the divider are optional blocks in the SoC
+  // configuration.  They default to present, which is the part this toolchain
+  // was written against; -mcpu=ug24-base, or -mno-mul / -mno-div, describes a
+  // part built without them.
+  bool HasMul = true;
+  bool HasDiv = true;
+  std::string CPU = "generic";
 
 public:
   UG24TargetInfo(const llvm::Triple &Triple, const TargetOptions &)
@@ -36,6 +45,12 @@ public:
     BoolWidth = BoolAlign = 8;
     IntWidth = 16;
     IntAlign = 8;
+    // `short` keeps two-byte alignment, so struct { char; short; } is four
+    // bytes where struct { char; int; } -- the same sixteen bits -- is three.
+    // That is not a choice made here: TargetInfo::getShortAlign() is
+    // hardcoded to 16 upstream, with a FIXME, and there is no hook for a
+    // target to lower it.  Over-alignment costs padding and nothing else on
+    // a machine with no alignment requirement.
     LongWidth = 32;
     LongAlign = 8;
     LongLongWidth = 64;
@@ -116,8 +131,19 @@ public:
   std::string_view getClobbers() const override { return ""; }
 
   bool hasFeature(StringRef Feature) const override {
-    return Feature == "ug24";
+    return llvm::StringSwitch<bool>(Feature)
+        .Case("ug24", true)
+        .Case("mul", HasMul)
+        .Case("div", HasDiv)
+        .Default(false);
   }
+
+  bool isValidCPUName(StringRef Name) const override;
+  void fillValidCPUList(SmallVectorImpl<StringRef> &Values) const override;
+  bool setCPU(const std::string &Name) override;
+
+  bool handleTargetFeatures(std::vector<std::string> &Features,
+                            DiagnosticsEngine &Diags) override;
 };
 
 } // namespace targets

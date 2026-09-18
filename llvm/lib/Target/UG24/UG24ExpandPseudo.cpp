@@ -15,6 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "UG24.h"
+#include "UG24FrameLowering.h"
 #include "UG24InstrInfo.h"
 #include "UG24Subtarget.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -46,6 +47,7 @@ private:
 
   bool expandMBB(MachineBasicBlock &MBB);
   bool expandMI(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI);
+  bool expandInterruptReturns(MachineFunction &MF);
 
   /// Emit \p Opcode on the low bytes and \p HiOpcode on the high bytes of a
   /// 16-bit destination / source pair.
@@ -248,6 +250,35 @@ bool UG24ExpandPseudo::expandMI(MachineBasicBlock &MBB,
   return true;
 }
 
+// An interrupt handler was entered by the hardware, which pushed PSW and then
+// the interrupted PC (see the interrupt model in docs/uG24-assumptions.md).
+// RET jumps to RA and would return to whatever the interrupted code was going
+// to return to, so the handler unwinds what the hardware pushed instead.
+//
+// This runs after the epilogue is in place, so the two pops land immediately
+// before the return, after everything the prologue saved has been restored.
+bool UG24ExpandPseudo::expandInterruptReturns(MachineFunction &MF) {
+  if (!UG24FrameLowering::isInterruptHandler(MF))
+    return false;
+
+  bool Modified = false;
+  for (MachineBasicBlock &MBB : MF) {
+    MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end();
+    while (I != E) {
+      MachineBasicBlock::iterator Next = std::next(I);
+      if (I->getOpcode() == UG24::RET) {
+        DebugLoc DL = I->getDebugLoc();
+        BuildMI(MBB, I, DL, TII->get(UG24::POPPSW));
+        BuildMI(MBB, I, DL, TII->get(UG24::POPPC));
+        I->eraseFromParent();
+        Modified = true;
+      }
+      I = Next;
+    }
+  }
+  return Modified;
+}
+
 bool UG24ExpandPseudo::expandMBB(MachineBasicBlock &MBB) {
   bool Modified = false;
   MachineBasicBlock::iterator I = MBB.begin(), E = MBB.end();
@@ -292,7 +323,7 @@ bool UG24ExpandPseudo::runOnMachineFunction(MachineFunction &MF) {
   TII = STI.getInstrInfo();
   TRI = STI.getRegisterInfo();
 
-  bool Modified = false;
+  bool Modified = expandInterruptReturns(MF);
   for (MachineBasicBlock &MBB : MF) {
     while (hasPseudos(MBB)) {
       bool Changed = expandMBB(MBB);

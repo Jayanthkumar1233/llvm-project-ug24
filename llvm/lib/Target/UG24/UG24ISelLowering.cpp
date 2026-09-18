@@ -76,16 +76,29 @@ UG24TargetLowering::UG24TargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::ROTL, MVT::i8, Legal);
   setOperationAction(ISD::ROTR, MVT::i8, Legal);
 
-  // Division, remainder and the wider multiplies go to compiler-rt.  The
-  // hardware MUL/DIV are 8x8 with an implicit destination and are emitted by
-  // peepholes rather than by pattern matching.
-  // The hardware has an 8x8 multiply and an 8-bit unsigned divide; everything
-  // wider, and the signed forms, go to the runtime helpers.
-  setOperationAction(ISD::MUL, MVT::i8, Legal);
-  setOperationAction(ISD::UDIV, MVT::i8, Legal);
-  setOperationAction(ISD::UREM, MVT::i8, Legal);
+  // The hardware has an 8x8 -> 16 multiply and an 8-bit unsigned divide, both
+  // writing an implicit destination; everything wider, and every signed form,
+  // goes to the runtime helpers.
+  //
+  // Both arithmetic blocks are optional in the SoC configuration.  Without
+  // them the same operations become calls to the runtime helpers, which are
+  // shift-and-add loops and so need no hardware of their own.
+  if (Subtarget.hasMul()) {
+    setOperationAction(ISD::MUL, MVT::i8, Legal);
+    setOperationAction(ISD::MUL, MVT::i16, Custom);
+  } else {
+    setOperationAction(ISD::MUL, MVT::i8, LibCall);
+    setOperationAction(ISD::MUL, MVT::i16, LibCall);
+  }
 
-  setOperationAction(ISD::MUL, MVT::i16, Custom);
+  if (Subtarget.hasDiv()) {
+    setOperationAction(ISD::UDIV, MVT::i8, Legal);
+    setOperationAction(ISD::UREM, MVT::i8, Legal);
+  } else {
+    setOperationAction(ISD::UDIV, MVT::i8, LibCall);
+    setOperationAction(ISD::UREM, MVT::i8, LibCall);
+  }
+
   setOperationAction(ISD::UDIV, MVT::i16, Expand);
   setOperationAction(ISD::UREM, MVT::i16, Expand);
   setOperationAction(ISD::SDIV, MVT::i8, Expand);

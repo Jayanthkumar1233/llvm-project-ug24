@@ -1,0 +1,9 @@
+  fixed array beside vla   = 914
+  sum of vla 1..10         = 55
+  sum of vla, n = 1        = 1
+  vla nested in a vla      = 8
+  vla passed to a call     = 7
+  alloca                   = 5
+  recursion with a vla     = 21
+
+PASS - 7 checks, all correct

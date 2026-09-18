@@ -464,6 +464,14 @@ std::string tools::getCPUName(const Driver &D, const ArgList &Args,
   case llvm::Triple::lanai:
     return getLanaiTargetCPU(Args);
 
+  case llvm::Triple::ug24:
+    // -mcpu picks between the fully-populated part and the one built without
+    // the optional multiplier and divider; the names are checked by
+    // UG24TargetInfo::isValidCPUName.
+    if ((A = Args.getLastArg(options::OPT_mcpu_EQ)))
+      return A->getValue();
+    return "";
+
   case llvm::Triple::systemz:
     return systemz::getSystemZTargetCPU(Args);
 

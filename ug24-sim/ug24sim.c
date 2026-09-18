@@ -25,8 +25,28 @@
 #define UART_TX     0xFF00u  // write: emit the byte on the console
 #define UART_STATUS 0xFF01u  // read: bit 0 set when the transmitter is ready
 #define SIM_EXIT    0xFF02u  // write: stop the simulator with this exit code
+
+// Interrupt controller.  The uG24 PSW reserves IE/ME/SE/NMI/MI, but the
+// specification available here does not say where the vector table lives or
+// which peripheral owns which source, so the controller below is the model
+// documented in docs/uG24-assumptions.md.  Everything in this block is an
+// assumption and is expected to change when the vendor answers A1/A6.
+#define IRQ_STATUS  0xFF10u  // read: pending sources; write: 1 bits clear
+#define IRQ_ENABLE  0xFF11u  // read/write: per-source enable mask
+#define IRQ_RAISE   0xFF12u  // write: raise source (bit number) by hand
+#define TIMER_LOAD  0xFF13u  // write: instructions between timer ticks, 0=off
+
+#define IRQ_SOURCE_TIMER 0x01u
+#define IRQ_SOURCE_SW    0x02u
+
+// Vector slots.  Each holds one LJA, which is four bytes wide.
+#define VECTOR_RESET 0x0000u
+#define VECTOR_NMI   0x0004u
+#define VECTOR_IRQ   0x0008u
+#define VECTOR_SWI   0x000Cu
+
 #define MMIO_BASE   0xFF00u
-#define MMIO_END    0xFF0Fu
+#define MMIO_END    0xFF1Fu
 
 // PSW bit positions, from the uG24 register spreadsheet.
 enum {
@@ -38,6 +58,11 @@ enum {
     PSW_GT = 6,
     PSW_S  = 7,
     PSW_DP = 8,
+    PSW_MI = 11,  // a maskable interrupt is being serviced
+    PSW_NM = 12,  // a non-maskable interrupt is being serviced
+    PSW_SE = 13,  // software interrupt enable
+    PSW_ME = 14,  // maskable interrupt enable
+    PSW_IE = 15,  // global interrupt enable
 };
 
 typedef struct {
@@ -57,6 +82,13 @@ typedef struct {
     // and the check is skipped.
     uint16_t stack_low, stack_high;
     int      stack_checked;
+
+    // Interrupt controller state.
+    uint8_t  irq_pending;
+    uint8_t  irq_enable;
+    uint8_t  timer_load;     // 0 disables the timer
+    uint32_t timer_count;    // instructions until the next tick
+    uint64_t irq_taken;      // how many interrupts were delivered
 } Core;
 
 // All data accesses go through these so that the peripheral window behaves
@@ -66,6 +98,9 @@ static uint8_t mem_read(Core *c, uint16_t addr) {
     if (addr >= MMIO_BASE && addr <= MMIO_END) {
         switch (addr) {
         case UART_STATUS: return 1;   // always ready to accept a byte
+        case IRQ_STATUS:  return c->irq_pending;
+        case IRQ_ENABLE:  return c->irq_enable;
+        case TIMER_LOAD:  return c->timer_load;
         default:          return 0;
         }
     }
@@ -82,6 +117,20 @@ static void mem_write(Core *c, uint16_t addr, uint8_t value) {
         case SIM_EXIT:
             c->exit_code = value;
             c->halted = 1;
+            break;
+        case IRQ_STATUS:
+            // Write-one-to-clear, which is what a handler does on the way out.
+            c->irq_pending &= (uint8_t)~value;
+            break;
+        case IRQ_ENABLE:
+            c->irq_enable = value;
+            break;
+        case IRQ_RAISE:
+            c->irq_pending |= (uint8_t)(1u << (value & 7));
+            break;
+        case TIMER_LOAD:
+            c->timer_load = value;
+            c->timer_count = value;
             break;
         default:
             break;
@@ -243,6 +292,60 @@ static void check_stack(Core *c) {
                 c->sp, c->stack_high);
         c->halted = 3;
     }
+}
+
+static void trace(Core *c, uint16_t pc, const char *fmt, ...);
+
+//===----------------------------------------------------------------------===//
+// Interrupts
+//===----------------------------------------------------------------------===//
+//
+// The model, all of it an assumption pending the vendor's answer to A1/A6:
+//
+//   * A source becomes pending in IRQ_STATUS.  It is delivered when it is
+//     also set in IRQ_ENABLE, and PSW.IE and PSW.ME are both set.
+//   * Delivery pushes the interrupted PC and then PSW, clears PSW.IE so the
+//     handler is not immediately re-entered, sets PSW.MI, and jumps to the
+//     maskable vector.
+//   * The handler returns with "pop psw" followed by "pop pc", which is what
+//     UG24ExpandPseudo emits in place of RET for an interrupt function.  PSW
+//     comes back with IE as it was, so interrupts re-enable on return.
+//   * Clearing the source is the handler's job: write its bit to IRQ_STATUS.
+//     A source left pending is delivered again as soon as the handler
+//     returns, which is how real edge/level confusion shows up, so the test
+//     programs clear it.
+
+static void tick_timer(Core *c) {
+    if (!c->timer_load)
+        return;
+    if (--c->timer_count == 0) {
+        c->timer_count = c->timer_load;
+        c->irq_pending |= IRQ_SOURCE_TIMER;
+    }
+}
+
+static void deliver_interrupt(Core *c) {
+    if (!(c->irq_pending & c->irq_enable))
+        return;
+    if (!get_bit(c, PSW_IE) || !get_bit(c, PSW_ME))
+        return;
+
+    uint16_t saved_psw = c->psw;
+
+    // PC first, then PSW, so that "pop psw; pop pc" unwinds them in order.
+    c->sp = (uint16_t)(c->sp - 2);
+    c->mem[c->sp] = (uint8_t)c->pc;
+    c->mem[(uint16_t)(c->sp + 1)] = (uint8_t)(c->pc >> 8);
+    c->sp = (uint16_t)(c->sp - 2);
+    c->mem[c->sp] = (uint8_t)saved_psw;
+    c->mem[(uint16_t)(c->sp + 1)] = (uint8_t)(saved_psw >> 8);
+
+    set_bit(c, PSW_IE, 0);
+    set_bit(c, PSW_MI, 1);
+    c->irq_taken++;
+    trace(c, c->pc, "interrupt -> %04x (pending=%02x sp=%04x)",
+          VECTOR_IRQ, c->irq_pending, c->sp);
+    c->pc = VECTOR_IRQ;
 }
 
 //===----------------------------------------------------------------------===//
@@ -543,7 +646,18 @@ static void step(Core *c) {
             case 0x01: trace(c, pc, "ret -> %04x", c->ra); c->pc = c->ra; return;
             case 0x02: trace(c, pc, "fncb"); return;
             case 0x03: trace(c, pc, "fnca"); return;
-            case 0x80: trace(c, pc, "wfi"); c->halted = 1; return;
+            case 0x80: // WFI
+                trace(c, pc, "wfi");
+                // Wait for an interrupt, rather than halt, only when one can
+                // still arrive.  crt0's halt loop reaches this with
+                // interrupts off and so stops the core, which is what every
+                // program that never enables them relies on.
+                if (get_bit(c, PSW_IE) && get_bit(c, PSW_ME) &&
+                    c->irq_enable && (c->timer_load || c->irq_pending))
+                    c->pc = pc;   // stay here until delivery moves PC
+                else
+                    c->halted = 1;
+                return;
             default: break;
             }
             break;
@@ -658,6 +772,12 @@ int main(int argc, char **argv) {
     while (!c->halted && c->cycles < max_steps) {
         step(c);
         check_stack(c);
+        // The timer counts retired instructions, which is the only clock this
+        // simulator has.  Delivery happens between instructions, so a handler
+        // never starts in the middle of one.
+        tick_timer(c);
+        if (!c->halted)
+            deliver_interrupt(c);
     }
 
     if (!c->halted)
@@ -668,6 +788,8 @@ int main(int argc, char **argv) {
     if (!quiet) {
         printf("halted after %llu instructions\n", (unsigned long long)c->cycles);
         printf("pc=%04x sp=%04x ra=%04x psw=%04x\n", c->pc, c->sp, c->ra, c->psw);
+        if (c->irq_taken)
+            printf("interrupts taken: %llu\n", (unsigned long long)c->irq_taken);
         // A byte-sized return lands in R0; anything 16-bit comes back in W.
         printf("return value: r0=%u  w=%u\n", c->r[0],
                (unsigned)(c->r[8] | (c->r[9] << 8)));

@@ -20,7 +20,8 @@ else
     echo "  build it with ./ug24-setup.sh, or set UG24_BUILD=/path/to/build" >&2
     exit 1
 fi
-SIM_BIN="$SIM_BIN"
+# The simulator in this repository wins over any older copy beside it.
+[ -x "$SIM_BIN" ] || SIM_BIN="$ROOT/ug24-sim/ug24sim"
 [ -x "$SIM_BIN" ] || SIM_BIN="$ROOT/../ug24-sim/ug24sim"
 
 

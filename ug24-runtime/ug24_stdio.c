@@ -23,6 +23,39 @@ typedef unsigned long u32;
 #define UART_READY  0x01
 
 //===----------------------------------------------------------------------===//
+// Floating-point conversion
+//===----------------------------------------------------------------------===//
+//
+// The formatter is in ug24_float.c, alongside the arithmetic it needs, so
+// that a program with no floating point in it links neither: a "Hello" that
+// prints no float is 300 bytes, and the same program with %f and a float to
+// put through it is about 25 KB once the soft-float library, the 64-bit
+// division behind the decimal conversion and the formatter itself are all
+// pulled in.  On a 64 KB part that is worth not paying for by default.
+//
+// Declared weak and *not defined here*, which is what makes the choice
+// automatic: an undefined weak symbol does not cause the linker to pull a
+// member out of libug24.a, so a program that never does any floating-point
+// arithmetic leaves this null and gets the placeholder below.  A program
+// that does any at all has already pulled ug24_float.c in for __addsf3 and
+// friends, and the symbol resolves to the real formatter.
+//
+// The gap is a program that prints a floating-point *constant* and does no
+// arithmetic, where the optimiser has folded everything away.  Link that
+// with -Wl,-u,__ug24_format_float: an explicit undefined symbol is a strong
+// one and does pull the member in.
+__attribute__((weak)) int __ug24_format_float(char *out, unsigned long bits,
+                                              int precision, char conv);
+
+static int format_float_placeholder(char *out) {
+  static const char placeholder[] = "<fp?>";
+  int i;
+  for (i = 0; placeholder[i]; i++)
+    out[i] = placeholder[i];
+  return i;
+}
+
+//===----------------------------------------------------------------------===//
 // Output sink: either the UART or a caller-supplied buffer.
 //===----------------------------------------------------------------------===//
 
@@ -247,9 +280,31 @@ static int format(Sink *sink, const char *fmt, va_list ap) {
       if (flags.left)  sink_pad(sink, ' ', width - length);
       break;
     }
-    case 'f': case 'F': case 'e': case 'E': case 'g': case 'G': case 'a':
-      // No FPU and no soft-float library on this target.
-      (void)va_arg(ap, unsigned long);
+    case 'f': case 'F': case 'e': case 'E': case 'g': case 'G': {
+      // double is IEEE single on this target, so the argument is four bytes
+      // and the union below takes it apart without any float arithmetic --
+      // which is the point: this file must stay free of soft-float calls so
+      // that a program with no floating point in it links none.
+      union { double d; unsigned long bits; } value;
+      char buffer[48];
+      int length;
+
+      value.d = va_arg(ap, double);
+      length = __ug24_format_float
+                   ? __ug24_format_float(buffer, value.bits, precision, conv)
+                   : format_float_placeholder(buffer);
+
+      if (!flags.left) sink_pad(sink, flags.zero ? '0' : ' ', width - length);
+      for (int i = 0; i < length; i++)
+        sink_put(sink, buffer[i]);
+      if (flags.left)  sink_pad(sink, ' ', width - length);
+      break;
+    }
+    case 'a': case 'A':
+      // Hexadecimal floating point has no users here and is not worth the
+      // code; the argument is still consumed so the rest of the format is
+      // not thrown out of step.
+      (void)va_arg(ap, double);
       sink_put(sink, '<'); sink_put(sink, 'f'); sink_put(sink, 'p');
       sink_put(sink, '?'); sink_put(sink, '>');
       break;

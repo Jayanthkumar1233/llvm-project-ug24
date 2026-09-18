@@ -11,15 +11,23 @@ uG24 code, and `ug24sim` executes that code on the host.
 
 ## 1. Layout
 
+Everything lives in one repository, so a clone gives you the compiler, the
+runtime it needs, the simulator that runs the result and the tests that prove
+it works. Nothing is shipped as a binary: the point is that anyone can build
+it.
+
 ```
-llvm-arm-cross/
-├── llvm-project/          LLVM sources, including the UG24 backend
-│   └── llvm/lib/Target/UG24/
-├── build-ug24/            build directory for the uG24 toolchain
-├── ug24-runtime/          crt0.s, ug24_builtins.c, ug24.ld
+llvm-project/              the repository
+├── llvm/lib/Target/UG24/  the backend
+├── clang/lib/Basic/Targets/UG24.*      the target description
+├── clang/lib/CodeGen/Targets/UG24.cpp  the C ABI
+├── clang/lib/Driver/ToolChains/UG24.*  the driver
+├── ug24-runtime/          crt0.s, the helper library, ug24.ld, the headers
 ├── ug24-sim/              ug24sim.c - instruction set simulator
-├── ug24-tests/            end-to-end compiler tests
-└── docs/                  this guide, the machine description, assumptions
+├── ug24-tests/            end-to-end tests and the acceptance suite
+├── docs/                  this guide, the machine description, assumptions
+├── ug24-setup.sh          builds the runtime and simulator, runs the tests
+└── build-ug24/            the build directory, created below
 ```
 
 ---
@@ -27,34 +35,53 @@ llvm-arm-cross/
 ## 2. Building the toolchain
 
 ```bash
-cd ~/llvm-arm-cross
-cmake -G Ninja -S llvm-project/llvm -B build-ug24 \
+cd llvm-project
+cmake -G Ninja -S llvm -B build-ug24 \
   -DCMAKE_BUILD_TYPE=Release \
   -DLLVM_TARGETS_TO_BUILD="UG24;AArch64;ARM" \
   -DLLVM_ENABLE_PROJECTS="clang;lld" \
-  -DCMAKE_C_COMPILER="$PWD/stage1/bin/clang" \
-  -DCMAKE_CXX_COMPILER="$PWD/stage1/bin/clang++" \
   -DCMAKE_INSTALL_PREFIX="$PWD/toolchain-ug24"
 ```
 
+`AArch64` and `ARM` are there only because the host tests use them; `UG24`
+alone is enough and builds faster. Add
+`-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++` if you would rather
+not build with GCC — either works.
+
 ```bash
-ninja -C build-ug24 clang lld llc llvm-mc llvm-objdump llvm-readobj llvm-nm llvm-ar
+ninja -C build-ug24 clang lld llc llvm-mc llvm-objdump llvm-readobj llvm-nm \
+  llvm-ar llvm-size llvm-dwarfdump
 ```
 
-### Building the uG24 runtime
+### Everything else, in one step
 
-The compiler needs a startup file, a small helper library and a linker script.
-They are installed into `lib/ug24` next to the compiler, which is where the
-driver looks for them.
+```bash
+./ug24-setup.sh
+```
+
+That builds the runtime into `build-ug24/lib/ug24` — the startup file, the
+helper library, the linker script and the headers, all where the driver looks
+for them — compiles the simulator, and runs the end-to-end tests. Pass a
+build directory as its argument, or set `UG24_BUILD`, if the toolchain is not
+in `build-ug24`.
+
+The two steps it wraps, if you want them separately:
 
 ```bash
 ./ug24-runtime/build-runtime.sh build-ug24
+cc -O2 -o ug24-sim/ug24sim ug24-sim/ug24sim.c
 ```
 
-### Building the simulator
+### Targeting a part without the optional blocks
+
+The multiplier and the divider are optional in the SoC configuration. They
+are present by default; `-mcpu=ug24-base` compiles for a part without them,
+and the same operations become calls to the runtime helpers, which are
+shift-and-add loops and need no hardware of their own. The runtime library
+does not have to be rebuilt to match.
 
 ```bash
-cc -O2 -o ug24-sim/ug24sim ug24-sim/ug24sim.c
+build-ug24/bin/clang --target=ug24-unknown-none-eabi -mcpu=ug24-base -Os hello.c -o hello.elf
 ```
 
 ---
@@ -116,8 +143,9 @@ build-ug24/bin/llvm-readobj --file-headers --relocations hello.o
 
 ## 4. Running a program
 
-`ug24sim` loads the ELF into a flat 64 KB memory, sets `SP` to `0xFFFE`, and
-interprets from the ELF entry point until the core executes `WFI`.
+`ug24sim` loads the ELF into a flat 64 KB memory, seeds `SP` from the
+`__stack_top` symbol in the image, and interprets from the ELF entry point
+until the core executes `WFI` with no interrupt left to wait for.
 
 ```bash
 ug24-sim/ug24sim hello.elf
@@ -133,6 +161,24 @@ Useful options:
 | `--trace` | Print every instruction as it executes, to stderr |
 | `--dump` | Write the whole 64 KB memory to `ug24-memory.bin` on exit |
 | `--max N` | Stop after N instructions instead of the 20,000,000 default |
+| `--quiet` | Print only what the program itself wrote |
+
+The exit status is what the program returned, except for three diagnostics:
+
+| Status | Meaning |
+| :--- | :--- |
+| 3 | An instruction the ISA does not define |
+| 4 | The stack left the window between `__heap_end` and `__stack_top` |
+| 2 | Bad command line |
+
+The stack window comes from the symbol table, and every instruction is
+checked against it. That turns the classic bare-metal failure — a stack that
+grows down into the heap and quietly corrupts it — into a message.
+
+The simulator also models an interrupt controller: a timer, a software
+source, and the `PSW` enable bits. Everything about it is an assumption; see
+"Interrupts" in [uG24-assumptions.md](uG24-assumptions.md) for what is
+assumed and why.
 
 To look at a global after the run, find its address and read the dump:
 
@@ -175,31 +221,86 @@ The run reports `w=13` (the value of `buffer[7]`), and the dump contains
 
 ## 6. Running the test suites
 
-The uG24 backend has LLVM regression tests:
+Three of them, from smallest to largest.
+
+**LLVM regression tests** — encodings, instruction selection, frame layout,
+the immediate range checks and the optional blocks:
 
 ```bash
-build-ug24/bin/llvm-lit -sv llvm-project/llvm/test/MC/UG24 llvm-project/llvm/test/CodeGen/UG24
+build-ug24/bin/llvm-lit -sv llvm/test/MC/UG24 llvm/test/CodeGen/UG24
 ```
 
-And an end-to-end test that compiles, links and executes 32 cases covering
-arithmetic, comparisons, control flow, calls, arrays, pointers and structs:
+**End-to-end cases** — 40 small programs compiled, linked and executed, each
+checked against a value computed on the host:
 
 ```bash
 ./ug24-tests/run-tests.sh
 ```
 
+**The acceptance suite** — fifteen whole programs, each run at `-O0`, `-O1`,
+`-O2`, `-Os` and `-O3` and diffed against expected output. Most of the
+expected files are generated by compiling the same source with the host
+compiler, so the suite is a comparison against a normal C implementation
+rather than against itself:
+
+```bash
+./ug24-tests/suite/run-suite.sh            # all of them
+./ug24-tests/suite/run-suite.sh t13_float  # just one
+```
+
+| Program | Covers |
+| :--- | :--- |
+| `t1_types` | integer widths, signedness, conversions |
+| `t2_string` | `mem*` and `str*` |
+| `t3_printf` | every `printf` conversion and flag |
+| `t4_flow` | loops, switches, recursion, function pointers |
+| `t5_volatile` | MMIO access patterns |
+| `t6_startup` | `.data` copy, `.bss` clear, initialisers |
+| `t7_malloc` | `malloc`, `free`, `realloc`, heap exhaustion |
+| `t8_stress` | a long mixed workload |
+| `t9_language` | every C statement, cross-checked against the host |
+| `t10_isa` | the instructions no C construct reaches, via a `.s` companion |
+| `t11_vla` | variable-length arrays and `alloca` |
+| `t12_int64` | 64-bit multiply, divide, shift and compare |
+| `t13_float` | soft float, including `%f`, `%e` and `%g` |
+| `t14_setjmp` | `setjmp` / `longjmp`, including out of a VLA frame |
+| `t15_interrupt` | interrupt handlers, under the assumed model |
+
+A failing case leaves its output in `ug24-tests/suite/<name><level>.actual`
+next to the `.expected` it did not match.
+
 ---
 
 ## 7. What the toolchain does not do yet
 
-- **32-bit and floating-point arithmetic.** The backend lowers these to
-  compiler-rt style calls (`__mulsi3`, `__adddf3`, …) which are not yet
-  implemented, so such programs fail to link with an undefined symbol.
-- **Signed and 16-bit division.** The hardware `DIV` is 8-bit unsigned only,
-  so signed division and all 16-bit division go through the software helpers
-  in `ug24-runtime/`.
-- **Variable-length stack objects.** `alloca` with a runtime size is rejected.
-- **Debug info.** DWARF is not emitted.
+- **Debug info beyond line tables.** DWARF is emitted and `llvm-dwarfdump`
+  reads it, but the backend has had no work on variable locations, so a
+  debugger would show optimised-away values rather than wrong ones.
 - **`JI`/`LJI` indirect jumps** assemble and simulate, but the code generator
-  does not select them, so computed gotos and jump tables are expanded into
+  does not select them, so computed gotos and jump tables become
   compare-and-branch chains.
+- **Double precision.** `double` and `long double` are IEEE *single* on this
+  target, the same choice AVR makes. Code that needs 53 bits of mantissa
+  will not get it.
+- **`%a`** in `printf` prints `<fp?>`. So does `%f` in a program that prints
+  a floating-point constant and does no arithmetic at all — the float runtime
+  is linked on demand, and such a program needs none of it. Link with
+  `-Wl,-u,__ug24_format_float` to force it in. Be aware of what it costs:
+  `printf("Hello ug24\n")` is 300 bytes and the same program with a real
+  `%f` is about 25 KB.
+- **`scanf` and friends.** There is no input device to read from.
+- **C++.** The runtime is C only: no `libc++`, no exceptions, no static
+  initialisation order support. C is complete through C17 apart from the
+  points above; `_Complex`, bit-fields, unions, variable-length arrays,
+  `alloca` and `setjmp` all work.
+
+Two things are implemented against **assumptions** rather than against the
+specification, because the documents to hand do not answer them. Both are
+marked as such in [uG24-assumptions.md](uG24-assumptions.md), and both are
+expected to change when the vendor answers specification queries A1, A6 and
+G5:
+
+- the **interrupt model** — where the vector table lives, what the hardware
+  pushes on entry, and which peripheral owns which source;
+- the **peripheral map** — the UART, the exit register and the interrupt
+  controller are placed in the top page by this toolchain, not by the SoC.

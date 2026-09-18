@@ -1,0 +1,24 @@
+add        ffffffffffffffff
+sub        fdb97530eca86421
+neg        fedcba9876543211
+shl4       123456789abcdef0
+shl32      89abcdef00000000
+shl-var    13579bde00000000
+shr4       00123456789abcde
+shr32      0000000001234567
+shr-var    000000000091a2b3
+sar8       fffffffee08e04fb
+sar-var    ffffffffffffff70
+mul        000000e8d4a51000
+mul-lim    0000000200000001
+mul-carry  fffffffe00000001
+mul-full   2236d88fe5618cf0
+udiv       5555555555555554
+umod       0000000000000000
+udiv-big   00000000e0000000
+sdiv       ffffffdebd0cfdb7
+smod       ffffffffffffffff
+sdiv-nn    0000002142f30249
+cmp 1 1 1 1
+divzero 1
+PASS - 64-bit arithmetic

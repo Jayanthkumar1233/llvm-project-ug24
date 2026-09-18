@@ -1,0 +1,27 @@
+add       40680000
+sub       40580000
+mul       3ee00000
+div       41e00000
+neg       c0600000
+addneg    3fc00000
+mulneg    c0e00000
+zero      00000000
+big+1     4b800000
+big*2     4c000000
+tiny      3a800000
+third     3eaaaaab
+tenth     3dcccccd
+sqrt2ish  3fffffff
+fromint   c996b438
+fromuint  4f6e6b28
+fromll    d38fb8fe
+toint 3 -2 -3
+touint 16777216
+cmp 1 0 1 1 1 1
+inf       7f800000
+nan-cmp 0 1
+f 3.250 -0.500 100.000 0.0
+g 1.5 0.125
+e 1.500e+00 -8.192e+03
+w |      1.25|1.25      |
+PASS - soft float

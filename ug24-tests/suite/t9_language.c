@@ -233,20 +233,12 @@ retry:
     printf("array: %d %d %d\n", values[3], grid[1][2], grid[2][2]);
     printf("pointer: %d %d %d %d\n", *p, *(p + 4), (int)(q - p), **pp);
 
-    /* --- variable-length arrays: NOT exercised here --------------------
-     *
-     * A VLA on its own works, but a function containing both a VLA and a
-     * fixed-size local returns into the stack -- the epilogue does not undo
-     * the dynamic SP adjustment, because the frame lowering has no frame
-     * pointer.  Reproducer:
-     *
-     *   int main(void){ int f[10]; for(int i=0;i<10;i++) f[i]=i;
-     *                   int n=4; int a[n]; ...  }
-     *   -> prints the right values, then "unimplemented instruction" at 0xfe28
-     *
-     * alloca() has the same shape and the same problem.  Left out until the
-     * frame lowering grows a frame pointer.
-     */
+    /* --- a variable-length array (C99) -------------------------------- */
+    int vla_len = 4;
+    int vla[vla_len];
+    for (int i = 0; i < vla_len; i++)
+        vla[i] = i + 1;
+    printf("vla: %d %d\n", vla[0], vla[vla_len - 1]);
 
     /* --- struct, union, bitfield, enum, designated init, compound lit - */
     struct Point origin = { 0, 0 };

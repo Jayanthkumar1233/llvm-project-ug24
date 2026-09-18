@@ -1,0 +1,5 @@
+returned 42 after 3 calls
+zero becomes 1
+vla frame unwound, value 7
+locals 11 22
+PASS - setjmp
