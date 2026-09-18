@@ -40,6 +40,17 @@ public:
 UG24::UG24() {
   // Fill gaps with WFI (0x8000), which halts rather than running into data.
   trapInstr = {0x00, 0x80, 0x00, 0x80};
+
+  // LLD's 0x10000 default is outside a 16-bit address space entirely.  Every
+  // link goes through ug24.ld, which fixes all addresses and so never reaches
+  // this, but a link without the script should still land somewhere the part
+  // can execute from.  The uG24 resets to the base of its address space.
+  defaultImageBase = 0;
+
+  // One flat 64 KB space with no MMU: there are no pages to align to, and
+  // padding sections out to 4 KB would waste most of the part.
+  defaultMaxPageSize = 1;
+  defaultCommonPageSize = 1;
 }
 
 RelExpr UG24::getRelExpr(RelType type, const Symbol &s,

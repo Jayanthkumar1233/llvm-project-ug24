@@ -96,6 +96,15 @@ ASM_FUNCTION_MSP430_RE = re.compile(
     flags=(re.M | re.S),
 )
 
+# uG24 output looks like MSP430's: a "name: ; @name" label, the body, then
+# .Lfunc_endN.
+ASM_FUNCTION_UG24_RE = re.compile(
+    r'^_?(?P<func>[^:]+):[ \t]*;+[ \t]*@"?(?P=func)"?\n[^:]*?'
+    r"(?P<body>.*?)\n"
+    r".Lfunc_end[0-9]+:\n",
+    flags=(re.M | re.S),
+)
+
 ASM_FUNCTION_AVR_RE = re.compile(
     r'^_?(?P<func>[^:]+):[ \t]*;+[ \t]*@"?(?P=func)"?\n[^:]*?'
     r"(?P<body>.*?)\n"
@@ -389,6 +398,17 @@ def scrub_asm_msp430(asm, args):
     return asm
 
 
+def scrub_asm_ug24(asm, args):
+    # Scrub runs of whitespace out of the assembly, but leave the leading
+    # whitespace in place.
+    asm = common.SCRUB_WHITESPACE_RE.sub(r" ", asm)
+    # Expand the tabs used for indentation.
+    asm = string.expandtabs(asm, 2)
+    # Strip trailing whitespace.
+    asm = common.SCRUB_TRAILING_WHITESPACE_RE.sub(r"", asm)
+    return asm
+
+
 def scrub_asm_avr(asm, args):
     # Scrub runs of whitespace out of the assembly, but leave the leading
     # whitespace in place.
@@ -540,6 +560,7 @@ def get_run_handler(triple):
         "mips": (scrub_asm_mips, ASM_FUNCTION_MIPS_RE),
         "msp430": (scrub_asm_msp430, ASM_FUNCTION_MSP430_RE),
         "avr": (scrub_asm_avr, ASM_FUNCTION_AVR_RE),
+        "ug24": (scrub_asm_ug24, ASM_FUNCTION_UG24_RE),
         "ppc32": (scrub_asm_powerpc, ASM_FUNCTION_PPC_RE),
         "ppc64": (scrub_asm_powerpc, ASM_FUNCTION_PPC_RE),
         "powerpc": (scrub_asm_powerpc, ASM_FUNCTION_PPC_RE),
