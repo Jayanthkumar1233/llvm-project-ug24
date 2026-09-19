@@ -1,0 +1,1823 @@
+<title>Building the uG24 Toolchain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&display=swap">
+
+<style>
+  /* ---- Light palette: the complete token set -------------------------
+     Shared with docs/handbook/index.html and build-from-scratch.html.
+     Copper is oxide and solder; trace blue is the blueprint. ---------- */
+  :root {
+    --ground:   #FBFCFD;
+    --surface:  #F0F3F8;
+    --sunken:   #E7ECF3;
+    --ink:      #101720;
+    --muted:    #58657A;
+    --faint:    #7C889A;
+    --rule:     #D2DAE6;
+    --rule-soft:#E3E9F1;
+
+    --copper:   #B0522B;
+    --copper-bg:#F6EAE3;
+    --trace:    #1D4E7C;
+    --trace-bg: #E4EDF6;
+    --good:     #2F6B45;
+    --good-bg:  #E4F0E8;
+    --warn-bg:  #F7F0DC;
+    --warn-ink: #7A5A16;
+
+    --code-bg:  #131A24;
+    --code-ink: #DCE4EE;
+    --code-dim: #7E8CA0;
+
+    --shadow: 0 1px 2px rgba(16,23,32,.06), 0 8px 24px -16px rgba(16,23,32,.28);
+  }
+
+  /* ---- Dark: redefine tokens only ----------------------------------- */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:   #0C1119;
+      --surface:  #141B25;
+      --sunken:   #1B2430;
+      --ink:      #E3E9F1;
+      --muted:    #9DAABC;
+      --faint:    #768395;
+      --rule:     #26303D;
+      --rule-soft:#1D2732;
+
+      --copper:   #E08A5E;
+      --copper-bg:#2A1B13;
+      --trace:    #74AEE0;
+      --trace-bg: #12222F;
+      --good:     #7BBF95;
+      --good-bg:  #12241A;
+      --warn-bg:  #2A2312;
+      --warn-ink: #D6BC77;
+
+      --code-bg:  #070B11;
+      --code-ink: #D6DFEA;
+      --code-dim: #6C7A8E;
+
+      --shadow: 0 1px 2px rgba(0,0,0,.5), 0 10px 30px -18px rgba(0,0,0,.9);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:   #0C1119;
+    --surface:  #141B25;
+    --sunken:   #1B2430;
+    --ink:      #E3E9F1;
+    --muted:    #9DAABC;
+    --faint:    #768395;
+    --rule:     #26303D;
+    --rule-soft:#1D2732;
+
+    --copper:   #E08A5E;
+    --copper-bg:#2A1B13;
+    --trace:    #74AEE0;
+    --trace-bg: #12222F;
+    --good:     #7BBF95;
+    --good-bg:  #12241A;
+    --warn-bg:  #2A2312;
+    --warn-ink: #D6BC77;
+
+    --code-bg:  #070B11;
+    --code-ink: #D6DFEA;
+    --code-dim: #6C7A8E;
+
+    --shadow: 0 1px 2px rgba(0,0,0,.5), 0 10px 30px -18px rgba(0,0,0,.9);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 28px 96px;
+  }
+
+  /* ---- Masthead ------------------------------------------------------ */
+  header.masthead {
+    border-bottom: 2px solid var(--ink);
+    padding: 56px 0 22px;
+    margin-bottom: 8px;
+  }
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--copper);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: clamp(34px, 5.4vw, 55px);
+    font-weight: 700;
+    letter-spacing: -.028em;
+    line-height: 1.04;
+    margin: 0 0 16px;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 19px;
+    color: var(--muted);
+    max-width: 62ch;
+    margin: 0;
+  }
+  .standfirst em { color: var(--ink); font-style: italic; }
+
+  /* ---- Fact strip ---------------------------------------------------- */
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(172px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 34px 0 8px;
+  }
+  .fact { background: var(--surface); padding: 14px 16px; }
+  .fact dt {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--faint); margin: 0 0 5px;
+  }
+  .fact dd {
+    margin: 0;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 15px; font-weight: 600; letter-spacing: -.01em;
+    font-variant-numeric: tabular-nums;
+  }
+  .fact dd.ok { color: var(--good); }
+
+  /* ---- Two-column shell ---------------------------------------------- */
+  .shell { display: block; }
+  @media (min-width: 1000px) {
+    .shell {
+      display: grid;
+      grid-template-columns: 216px minmax(0, 1fr);
+      gap: 56px;
+      align-items: start;
+    }
+    nav.toc { position: sticky; top: 28px; max-height: calc(100vh - 56px); overflow-y: auto; }
+  }
+
+  nav.toc { padding-top: 46px; }
+  nav.toc h2 {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--faint); font-weight: 500;
+    margin: 0 0 12px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule);
+  }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  nav.toc a {
+    display: grid; grid-template-columns: 24px 1fr; gap: 6px;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 13.5px; line-height: 1.35;
+    color: var(--muted); text-decoration: none;
+    padding: 5px 6px 5px 0; border-radius: 3px;
+  }
+  nav.toc a span.n {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums;
+  }
+  nav.toc a:hover { color: var(--copper); }
+  nav.toc a:hover span.n { color: var(--copper); }
+  nav.toc a:focus-visible { outline: 2px solid var(--copper); outline-offset: 2px; }
+  nav.toc li.gap { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--rule-soft); }
+
+  /* ---- Sections ------------------------------------------------------ */
+  main { padding-top: 46px; min-width: 0; }
+  section { margin-bottom: 62px; scroll-margin-top: 24px; }
+
+  .sec-head { display: flex; align-items: baseline; gap: 13px; margin-bottom: 6px; }
+  .sec-num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px; font-weight: 500; color: var(--copper);
+    letter-spacing: .06em; padding-top: 2px; white-space: nowrap;
+  }
+  h2.sec {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: clamp(23px, 3vw, 30px); font-weight: 650;
+    letter-spacing: -.021em; line-height: 1.15;
+    margin: 0; text-wrap: balance;
+  }
+  .sec-rule { height: 1px; background: var(--rule); margin: 14px 0 24px; }
+
+  h3 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 17.5px; font-weight: 650; letter-spacing: -.012em;
+    margin: 34px 0 10px; text-wrap: balance;
+  }
+  h4 {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px; font-weight: 600; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--faint);
+    margin: 26px 0 9px;
+  }
+
+  p { margin: 0 0 15px; max-width: 68ch; }
+  main ul, main ol.body-list { margin: 0 0 16px; padding-left: 21px; max-width: 66ch; }
+  main li { margin-bottom: 7px; }
+  strong { font-weight: 600; }
+  a { color: var(--trace); text-underline-offset: 2px; }
+
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .855em;
+    background: var(--sunken);
+    padding: .1em .34em;
+    border-radius: 3px;
+    color: var(--ink);
+  }
+
+  /* ---- Command blocks ------------------------------------------------ */
+  .cmd {
+    background: var(--code-bg);
+    border-radius: 5px;
+    margin: 0 0 16px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .cmd-label {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--code-dim);
+    padding: 9px 15px 0;
+  }
+  .cmd pre {
+    margin: 0;
+    padding: 10px 15px 15px;
+    overflow-x: auto;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13.5px;
+    line-height: 1.62;
+    color: var(--code-ink);
+    tab-size: 4;
+  }
+  .cmd pre .p { color: var(--code-dim); }
+  .cmd pre .o { color: #E0A46E; }
+  .cmd pre .k { color: #85B8E8; }
+
+  /* ---- Tables -------------------------------------------------------- */
+  .tw { overflow-x: auto; margin: 0 0 18px; border: 1px solid var(--rule); border-radius: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td {
+    text-align: left; padding: 9px 14px;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+  }
+  thead th {
+    background: var(--surface);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--faint); font-weight: 600;
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td code { background: none; padding: 0; color: var(--trace); }
+  td.mono, th.mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ---- Callouts ------------------------------------------------------ */
+  .note {
+    border-left: 3px solid var(--copper);
+    background: var(--copper-bg);
+    padding: 14px 18px;
+    margin: 0 0 18px;
+    border-radius: 0 4px 4px 0;
+    max-width: 68ch;
+  }
+  .note p:last-child { margin-bottom: 0; }
+  .note .tag {
+    display: block;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--copper); margin-bottom: 6px; font-weight: 600;
+  }
+  .note.caution { border-left-color: var(--warn-ink); background: var(--warn-bg); }
+  .note.caution .tag { color: var(--warn-ink); }
+
+  /* Plain-language aside: the on-ramp for a reader new to compilers.
+     Blueprint blue, so it reads as scaffolding rather than as a warning. */
+  .plain {
+    border-left: 3px solid var(--trace);
+    background: var(--trace-bg);
+    padding: 14px 18px;
+    margin: 0 0 18px;
+    border-radius: 0 4px 4px 0;
+    max-width: 68ch;
+  }
+  .plain p:last-child { margin-bottom: 0; }
+  .plain .tag {
+    display: block;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--trace); margin-bottom: 6px; font-weight: 600;
+  }
+
+  /* ---- Figures ------------------------------------------------------- */
+  figure { margin: 4px 0 26px; }
+  figure .fw { overflow-x: auto; }
+  figure svg { display: block; width: 100%; height: auto; min-width: 560px; }
+  figcaption {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 13.5px; color: var(--muted);
+    margin-top: 10px; max-width: 66ch;
+  }
+
+  /* ---- Phase strip ---------------------------------------------------- */
+  .phases {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 4px 0 26px;
+  }
+  .phases div { background: var(--surface); padding: 11px 13px; }
+  .phases .n {
+    display: block;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: .1em; color: var(--copper);
+    font-weight: 600; margin-bottom: 4px;
+  }
+  .phases .t {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 13.5px; font-weight: 600; line-height: 1.3;
+    display: block; margin-bottom: 3px;
+  }
+  .phases .d {
+    font-size: 12.5px; color: var(--faint); line-height: 1.4;
+    display: block;
+  }
+
+  /* ---- Glossary ------------------------------------------------------- */
+  dl.gloss { margin: 0; max-width: 72ch; }
+  dl.gloss > div {
+    display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 18px;
+    padding: 11px 0; border-bottom: 1px solid var(--rule-soft);
+  }
+  dl.gloss > div:last-child { border-bottom: none; }
+  dl.gloss dt {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 14.5px; font-weight: 650; letter-spacing: -.01em;
+  }
+  dl.gloss dd { margin: 0; font-size: 15px; color: var(--muted); }
+  dl.gloss dd code { font-size: .82em; }
+  @media (max-width: 640px) {
+    dl.gloss > div { grid-template-columns: 1fr; gap: 3px; }
+  }
+
+  /* ---- Status pills --------------------------------------------------- */
+  .pill {
+    display: inline-block;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 10px; font-weight: 600;
+    white-space: nowrap;
+  }
+  .pill.done   { background: var(--good-bg);   color: var(--good); }
+  .pill.gap    { background: var(--warn-bg);   color: var(--warn-ink); }
+  .pill.assume { background: var(--copper-bg); color: var(--copper); }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    margin-top: 20px; padding-top: 20px;
+    font-size: 13.5px; color: var(--faint);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    max-width: 72ch;
+  }
+  footer a { color: var(--trace); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Handbook · how it was built, from nothing</p>
+    <h1>Building the uG24 Toolchain</h1>
+    <p class="standfirst">
+      A new 8-bit processor existed only as a specification and a spreadsheet.
+      No compiler in the world could produce a single instruction for it. This
+      is every stage of what was built to change that, in the order it was
+      built, written so that <em>you do not need to know what a compiler is
+      to follow it</em>.
+    </p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Target</dt><dd>uG24, 8-bit</dd></div>
+      <div class="fact"><dt>Built on</dt><dd>LLVM 17.0.6</dd></div>
+      <div class="fact"><dt>New code</dt><dd>~11,300 lines</dd></div>
+      <div class="fact"><dt>Instructions</dt><dd>51 encodings</dd></div>
+      <div class="fact"><dt>Hello world</dt><dd>300 bytes</dd></div>
+      <div class="fact"><dt>Tests</dt><dd class="ok">127 passing</dd></div>
+    </dl>
+  </header>
+
+  <div class="shell">
+
+    <nav class="toc">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#s1"><span class="n">01</span><span>The problem</span></a></li>
+        <li><a href="#s2"><span class="n">02</span><span>What a compiler does</span></a></li>
+        <li><a href="#s3"><span class="n">03</span><span>The machine</span></a></li>
+        <li class="gap"><a href="#s4"><span class="n">P1</span><span>Reading the hardware</span></a></li>
+        <li><a href="#s5"><span class="n">P2</span><span>Declaring the target</span></a></li>
+        <li><a href="#s6"><span class="n">P3</span><span>Machine code</span></a></li>
+        <li><a href="#s7"><span class="n">P4</span><span>The register file</span></a></li>
+        <li><a href="#s8"><span class="n">P5</span><span>Instruction selection</span></a></li>
+        <li><a href="#s9"><span class="n">P6</span><span>Frames and calls</span></a></li>
+        <li><a href="#s10"><span class="n">P7</span><span>Linking</span></a></li>
+        <li><a href="#s11"><span class="n">P8</span><span>The runtime</span></a></li>
+        <li><a href="#s12"><span class="n">P9</span><span>The simulator</span></a></li>
+        <li><a href="#s13"><span class="n">P10</span><span>The C library</span></a></li>
+        <li><a href="#s14"><span class="n">P11</span><span>Finding the bugs</span></a></li>
+        <li><a href="#s15"><span class="n">P12</span><span>Options and interrupts</span></a></li>
+        <li class="gap"><a href="#s16"><span class="n">04</span><span>Where it stands</span></a></li>
+        <li><a href="#s17"><span class="n">05</span><span>Where things live</span></a></li>
+        <li><a href="#s18"><span class="n">06</span><span>Glossary</span></a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+      <!-- =============================================== 01 ========= -->
+      <section id="s1">
+        <div class="sec-head"><span class="sec-num">01</span><h2 class="sec">The problem: a chip that nothing can program</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          A processor is a piece of silicon that reads numbers out of memory and
+          does what each number tells it to do. The numbers are called
+          <strong>machine code</strong>, and every family of processor uses a
+          different set of them. The number that means "add these two registers"
+          on an Intel chip means something else entirely on an ARM chip, and
+          nothing at all on a chip neither company has ever heard of.
+        </p>
+
+        <p>
+          The uG24 is that third kind. It is a custom 8-bit microprocessor
+          designed in-house. When this work started it existed as two documents —
+          a specification PDF and a spreadsheet of instruction encodings — and
+          as design files. What did <em>not</em> exist was any way to write a
+          program for it in a language a person would want to use.
+        </p>
+
+        <div class="plain">
+          <span class="tag">In plain terms</span>
+          <p>
+            You cannot download a compiler for a chip that has just been
+            invented, for the same reason you cannot download a
+            Klingon–English dictionary for a language someone made up last
+            week. Somebody has to write it. This handbook is the record of
+            writing it.
+          </p>
+        </div>
+
+        <p>
+          Writing machine code by hand is possible and completely impractical:
+          a page of C becomes hundreds of hand-placed numbers, and one
+          mistyped digit is a bug nothing will catch. What everybody actually
+          wants is to write <code>c = a + b;</code> and have a program work out
+          which numbers that means. That program is a compiler, and a compiler
+          for a processor that is <em>not</em> the one you are sitting at is a
+          <strong>cross compiler</strong>.
+        </p>
+
+        <p>
+          So the job was: build a cross compiler for the uG24, plus everything
+          a compiler needs around it to be useful — an assembler, a linker, a
+          startup file, a C library, and something to run the results on,
+          because no silicon exists yet either.
+        </p>
+
+        <h3>What "built" means here</h3>
+
+        <p>
+          None of this was written from a blank page. LLVM is an open-source
+          compiler framework used by Apple, Google, Sony and most of the
+          embedded industry, and it is deliberately built so that a new
+          processor can be added to it. Everything that is <em>not</em> specific
+          to a processor — parsing C, optimising, register allocation, the
+          structure of the linker — already existed and was reused.
+        </p>
+
+        <p>
+          What had to be written is the part that knows about the uG24:
+          about 11,300 lines across the compiler, the assembler, the linker,
+          the runtime library, the simulator and the tests. That is the subject
+          of this document.
+        </p>
+      </section>
+
+      <!-- =============================================== 02 ========= -->
+      <section id="s2">
+        <div class="sec-head"><span class="sec-num">02</span><h2 class="sec">What a compiler actually does</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          A compiler is not one program. It is a chain of them, each handing
+          its output to the next. Knowing the chain is most of what you need to
+          follow the rest of this handbook, because each phase of the work
+          built one link in it.
+        </p>
+
+        <figure>
+          <div class="fw">
+            <svg viewBox="0 0 980 300" role="img" xmlns="http://www.w3.org/2000/svg"
+                 aria-label="The compilation chain: C source becomes tokens and a syntax tree in the front end, then LLVM IR, then uG24 machine instructions in the back end, then a relocatable object file, which the linker joins with the runtime into an ELF executable that the simulator runs.">
+              <defs>
+                <marker id="hb-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+                        markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--faint)"/>
+                </marker>
+              </defs>
+              <g font-family="IBM Plex Sans, system-ui, sans-serif">
+
+                <!-- row 1: the five stages -->
+                <g>
+                  <rect x="2" y="54" width="150" height="66" rx="4" fill="var(--surface)" stroke="var(--rule)"/>
+                  <text x="77" y="80" text-anchor="middle" font-size="15" font-weight="600" fill="var(--ink)">hello.c</text>
+                  <text x="77" y="98" text-anchor="middle" font-size="12.5" fill="var(--faint)">what you write</text>
+                </g>
+
+                <g>
+                  <rect x="196" y="40" width="158" height="94" rx="4" fill="var(--trace-bg)" stroke="var(--trace)"/>
+                  <text x="275" y="66" text-anchor="middle" font-size="15" font-weight="600" fill="var(--ink)">front end</text>
+                  <text x="275" y="85" text-anchor="middle" font-size="12.5" fill="var(--faint)">reads C, checks it,</text>
+                  <text x="275" y="101" text-anchor="middle" font-size="12.5" fill="var(--faint)">builds a tree</text>
+                  <text x="275" y="122" text-anchor="middle" font-size="11.5" font-family="IBM Plex Mono, monospace" fill="var(--trace)">reused</text>
+                </g>
+
+                <g>
+                  <rect x="398" y="26" width="176" height="122" rx="4" fill="var(--copper-bg)" stroke="var(--copper)" stroke-width="1.5"/>
+                  <text x="486" y="52" text-anchor="middle" font-size="15" font-weight="600" fill="var(--ink)">back end</text>
+                  <text x="486" y="71" text-anchor="middle" font-size="12.5" fill="var(--faint)">picks uG24 instructions,</text>
+                  <text x="486" y="87" text-anchor="middle" font-size="12.5" fill="var(--faint)">assigns registers,</text>
+                  <text x="486" y="103" text-anchor="middle" font-size="12.5" fill="var(--faint)">lays out the stack,</text>
+                  <text x="486" y="119" text-anchor="middle" font-size="12.5" fill="var(--faint)">encodes the bits</text>
+                  <text x="486" y="139" text-anchor="middle" font-size="11.5" font-family="IBM Plex Mono, monospace" fill="var(--copper)">written here</text>
+                </g>
+
+                <g>
+                  <rect x="618" y="40" width="150" height="94" rx="4" fill="var(--trace-bg)" stroke="var(--trace)"/>
+                  <text x="693" y="66" text-anchor="middle" font-size="15" font-weight="600" fill="var(--ink)">linker</text>
+                  <text x="693" y="85" text-anchor="middle" font-size="12.5" fill="var(--faint)">joins the pieces,</text>
+                  <text x="693" y="101" text-anchor="middle" font-size="12.5" fill="var(--faint)">fixes the addresses</text>
+                  <text x="693" y="122" text-anchor="middle" font-size="11.5" font-family="IBM Plex Mono, monospace" fill="var(--trace)">mostly reused</text>
+                </g>
+
+                <g>
+                  <rect x="812" y="54" width="166" height="66" rx="4" fill="var(--surface)" stroke="var(--rule)"/>
+                  <text x="895" y="80" text-anchor="middle" font-size="15" font-weight="600" fill="var(--ink)">hello.elf</text>
+                  <text x="895" y="98" text-anchor="middle" font-size="12.5" fill="var(--faint)">what the chip runs</text>
+                </g>
+
+                <!-- arrows with labels -->
+                <line x1="152" y1="87" x2="192" y2="87" stroke="var(--faint)" marker-end="url(#hb-arrow)"/>
+                <line x1="354" y1="87" x2="394" y2="87" stroke="var(--faint)" marker-end="url(#hb-arrow)"/>
+                <text x="376" y="76" text-anchor="middle" font-size="11.5" font-family="IBM Plex Mono, monospace" fill="var(--muted)">IR</text>
+                <line x1="574" y1="87" x2="614" y2="87" stroke="var(--faint)" marker-end="url(#hb-arrow)"/>
+                <text x="595" y="76" text-anchor="middle" font-size="11.5" font-family="IBM Plex Mono, monospace" fill="var(--muted)">.o</text>
+                <line x1="768" y1="87" x2="808" y2="87" stroke="var(--faint)" marker-end="url(#hb-arrow)"/>
+
+                <!-- row 2: the runtime feeding the linker -->
+                <g>
+                  <rect x="618" y="196" width="150" height="70" rx="4" fill="var(--surface)" stroke="var(--rule)"/>
+                  <text x="693" y="222" text-anchor="middle" font-size="15" font-weight="600" fill="var(--ink)">runtime</text>
+                  <text x="693" y="240" text-anchor="middle" font-size="12.5" fill="var(--faint)">crt0 · libug24 · ug24.ld</text>
+                  <text x="693" y="257" text-anchor="middle" font-size="11.5" font-family="IBM Plex Mono, monospace" fill="var(--copper)">written here</text>
+                </g>
+                <line x1="693" y1="192" x2="693" y2="140" stroke="var(--faint)" marker-end="url(#hb-arrow)"/>
+
+                <!-- simulator -->
+                <g>
+                  <rect x="812" y="196" width="166" height="70" rx="4" fill="var(--copper-bg)" stroke="var(--copper)"/>
+                  <text x="895" y="222" text-anchor="middle" font-size="15" font-weight="600" fill="var(--ink)">ug24sim</text>
+                  <text x="895" y="240" text-anchor="middle" font-size="12.5" fill="var(--faint)">stands in for silicon</text>
+                  <text x="895" y="257" text-anchor="middle" font-size="11.5" font-family="IBM Plex Mono, monospace" fill="var(--copper)">written here</text>
+                </g>
+                <line x1="895" y1="124" x2="895" y2="192" stroke="var(--faint)" marker-end="url(#hb-arrow)"/>
+              </g>
+            </svg>
+          </div>
+          <figcaption>
+            The chain, with what was reused from LLVM in blue and what had to be
+            written for the uG24 in copper. The front end and the optimiser never
+            learn which processor they are compiling for; everything
+            processor-specific lives in the back end and below.
+          </figcaption>
+        </figure>
+
+        <h3>The five links, one paragraph each</h3>
+
+        <p>
+          <strong>The front end</strong> reads your C, checks it makes sense,
+          and reports your typos. It then throws the C away and emits
+          <strong>intermediate representation</strong> — LLVM IR — a simplified,
+          processor-independent form of the same program. IR is where all the
+          optimisation happens, and it knows nothing about the uG24 beyond a
+          short description of how wide its integers and pointers are.
+        </p>
+
+        <p>
+          <strong>The back end</strong> turns IR into instructions this
+          particular processor has. This is the largest piece of the work and
+          the subject of phases 3 to 6 below. It has to choose instructions,
+          decide which of the sixteen registers holds which value, arrange the
+          stack, and finally write out the exact bits.
+        </p>
+
+        <p>
+          <strong>The assembler</strong> is the same machinery seen from the
+          other side: it turns human-written text like <code>adi r0, 1</code>
+          into the same bits. Both use one shared description of the
+          instruction set, which is why they can never disagree.
+        </p>
+
+        <p>
+          <strong>The linker</strong> takes the object files — one per source
+          file, each still full of blanks where an address should be — joins
+          them with the startup code and the library, decides where everything
+          lives in memory, and fills in the blanks. Its instructions come from
+          a <strong>linker script</strong>, which is the map of the chip's
+          memory.
+        </p>
+
+        <p>
+          <strong>The runtime</strong> is the code that runs before and beneath
+          your program: the few dozen instructions between power-on and the
+          first line of <code>main</code>, and the library functions
+          (<code>printf</code>, <code>malloc</code>, <code>memcpy</code>) that C
+          programs assume are simply there. On a desktop the operating system
+          provides all of it. Here there is no operating system, so it was
+          written too.
+        </p>
+      </section>
+
+      <!-- =============================================== 03 ========= -->
+      <section id="s3">
+        <div class="sec-head"><span class="sec-num">03</span><h2 class="sec">The machine we had to hit</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          Everything difficult about this project follows from four facts about
+          the uG24.
+        </p>
+
+        <div class="tw">
+          <table>
+            <thead>
+              <tr><th>Fact</th><th>What it means for a compiler</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>The ALU is 8 bits wide</strong></td>
+                <td>The arithmetic unit adds one byte at a time. But C's <code>int</code> on this target is 16 bits, so a single <code>a + b</code> in C is <em>two</em> machine instructions, and the second one has to pick up the carry the first produced.</td>
+              </tr>
+              <tr>
+                <td><strong>Addresses are 16 bits</strong></td>
+                <td>64 KB of memory total, for code and data together. A pointer does not fit in a register; it takes a pair of them. Program size matters constantly.</td>
+              </tr>
+              <tr>
+                <td><strong>There are 16 registers</strong></td>
+                <td><code>R0</code>–<code>R15</code>, one byte each, which also pair up into eight 16-bit registers. Two of the sixteen had to be reserved for the compiler's own use, leaving fourteen for your program.</td>
+              </tr>
+              <tr>
+                <td><strong>Instructions are 16 bits, fixed</strong></td>
+                <td>Every instruction is exactly two bytes (except two jumps, which take a second fetch). That is a tight budget: an instruction that names two registers and an 8-bit constant has already spent all sixteen bits.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="plain">
+          <span class="tag">In plain terms</span>
+          <p>
+            Think of the processor as a clerk who can only add two-digit numbers
+            and has sixteen scraps of paper to work on. Asking for a four-digit
+            sum is fine, but the clerk has to do it in two steps and remember to
+            carry. The compiler's job is to break every calculation in your
+            program down into steps that small, and to keep track of which
+            scrap holds what.
+          </p>
+        </div>
+
+        <h3>Why a 16-bit add takes two instructions</h3>
+
+        <p>
+          This one picture explains most of the back end's existence.
+        </p>
+
+        <figure>
+          <div class="fw">
+            <svg viewBox="0 0 900 260" role="img" xmlns="http://www.w3.org/2000/svg"
+                 aria-label="One C statement adding two 16-bit integers becomes two uG24 instructions: ADD on the low bytes, which sets the carry flag, then ADC on the high bytes, which consumes it.">
+              <defs>
+                <marker id="hb-arrow2" viewBox="0 0 10 10" refX="9" refY="5"
+                        markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--faint)"/>
+                </marker>
+              </defs>
+              <g font-family="IBM Plex Sans, system-ui, sans-serif">
+
+                <text x="0" y="22" font-size="11" font-family="IBM Plex Mono, monospace"
+                      letter-spacing="1.4" fill="var(--faint)">WHAT YOU WROTE</text>
+                <rect x="0" y="34" width="250" height="40" rx="4" fill="var(--surface)" stroke="var(--rule)"/>
+                <text x="16" y="60" font-size="14" font-family="IBM Plex Mono, monospace" fill="var(--ink)">int c = a + b;</text>
+
+                <line x1="125" y1="78" x2="125" y2="112" stroke="var(--faint)" marker-end="url(#hb-arrow2)"/>
+
+                <text x="0" y="106" font-size="11" font-family="IBM Plex Mono, monospace"
+                      letter-spacing="1.4" fill="var(--faint)">WHAT THE CHIP GETS</text>
+
+                <!-- low byte -->
+                <rect x="0" y="118" width="250" height="44" rx="4" fill="var(--copper-bg)" stroke="var(--copper)"/>
+                <text x="16" y="146" font-size="14" font-family="IBM Plex Mono, monospace" fill="var(--ink)">add  r0, r2</text>
+                <text x="266" y="140" font-size="12.5" fill="var(--muted)">low bytes: r0 = r0 + r2</text>
+                <text x="266" y="157" font-size="12.5" fill="var(--muted)">and the overflow is left in the carry flag</text>
+
+                <!-- high byte -->
+                <rect x="0" y="176" width="250" height="44" rx="4" fill="var(--copper-bg)" stroke="var(--copper)"/>
+                <text x="16" y="204" font-size="14" font-family="IBM Plex Mono, monospace" fill="var(--ink)">adc  r1, r3</text>
+                <text x="266" y="198" font-size="12.5" fill="var(--muted)">high bytes: r1 = r1 + r3 + carry</text>
+                <text x="266" y="215" font-size="12.5" fill="var(--muted)">the carry is what joins the two halves</text>
+
+                <!-- the carry link -->
+                <path d="M 250 140 C 300 140 300 176 250 198" fill="none"
+                      stroke="var(--copper)" stroke-width="1.6" stroke-dasharray="4 3"
+                      marker-end="url(#hb-arrow2)"/>
+                <text x="316" y="176" font-size="11.5" font-family="IBM Plex Mono, monospace"
+                      fill="var(--copper)" font-weight="600">carry</text>
+
+                <!-- register pair -->
+                <text x="600" y="22" font-size="11" font-family="IBM Plex Mono, monospace"
+                      letter-spacing="1.4" fill="var(--faint)">WHERE THE VALUES SIT</text>
+                <rect x="600" y="34" width="70" height="40" rx="3" fill="var(--sunken)" stroke="var(--rule)"/>
+                <rect x="670" y="34" width="70" height="40" rx="3" fill="var(--sunken)" stroke="var(--rule)"/>
+                <text x="635" y="59" text-anchor="middle" font-size="13" font-family="IBM Plex Mono, monospace" fill="var(--ink)">r1</text>
+                <text x="705" y="59" text-anchor="middle" font-size="13" font-family="IBM Plex Mono, monospace" fill="var(--ink)">r0</text>
+                <text x="670" y="90" text-anchor="middle" font-size="11.5" fill="var(--faint)">one 16-bit value, held as the pair P0</text>
+                <text x="600" y="27" font-size="10" fill="var(--faint)"></text>
+              </g>
+            </svg>
+          </div>
+          <figcaption>
+            Every 16-bit operation in a C program splits like this. The back end
+            chooses the pair, emits both halves in the right order, and makes
+            sure nothing in between disturbs the carry flag — which is the kind
+            of bookkeeping a person doing this by hand gets wrong.
+          </figcaption>
+        </figure>
+      </section>
+
+      <!-- =============================================== P1 ========= -->
+      <section id="s4">
+        <div class="sec-head"><span class="sec-num">P1</span><h2 class="sec">Reading the hardware documents</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          Before a line of code, the two source documents had to be turned into
+          something exact enough to build on. A compiler cannot cope with
+          "roughly": if the shift instruction encodes its amount minus one and
+          you assume it encodes the amount, every shift in every program is off
+          by one and nothing tells you.
+        </p>
+
+        <p>
+          Two things came out of this phase, and both shaped everything after.
+        </p>
+
+        <h3>The spreadsheet is the ground truth</h3>
+
+        <p>
+          The PDF and the encoding spreadsheet disagreed in places. The
+          spreadsheet won, every time, because it is the document generated
+          from the design rather than written about it. Where they conflicted,
+          the conflict was recorded rather than quietly resolved.
+        </p>
+
+        <h3>Fifty-one questions the documents could not answer</h3>
+
+        <p>
+          Some things a compiler must know simply are not written down anywhere:
+          whether the 8-bit immediates are signed, whether the pipeline stalls
+          automatically when one instruction needs the result of the one before,
+          what the board will strap the reset stack pointer to. Each of these
+          became a numbered query to the silicon team.
+        </p>
+
+        <p>
+          Where a query blocked progress, the toolchain made a decision,
+          <em>implemented it</em>, and wrote down both the decision and the fact
+          that it was a decision. That record is
+          <code>docs/uG24-assumptions.md</code>, and it is the reason a wrong
+          guess is recoverable: each assumption names the one file that changes
+          if the answer differs.
+        </p>
+
+        <div class="note">
+          <span class="tag">The discipline that matters</span>
+          <p>
+            An assumption you have written down is a task. An assumption you
+            have forgotten making is a bug that will surface on silicon, months
+            later, looking like something else entirely. Every choice this
+            toolchain made in the absence of an answer is in that file, with the
+            reasoning and the fix.
+          </p>
+        </div>
+      </section>
+
+      <!-- =============================================== P2 ========= -->
+      <section id="s5">
+        <div class="sec-head"><span class="sec-num">P2</span><h2 class="sec">Teaching the tools that the chip exists</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          The first code written did almost nothing, and was the right place to
+          start: it gave the project a milestone it could actually reach.
+        </p>
+
+        <p>
+          Every processor LLVM knows is identified by a <strong>triple</strong>,
+          a short string naming the architecture, the vendor, the operating
+          system and the ABI. The uG24's is
+          <code>ug24-unknown-none-eabi</code> — a uG24, from no particular
+          vendor, with no operating system. Separately, executable files carry a
+          number saying which machine they are for; ARM is 40, x86-64 is 62, and
+          the uG24 was assigned <code>0x9240</code> in the private range.
+        </p>
+
+        <div class="cmd">
+          <div class="cmd-label">The first thing that worked</div>
+<pre><span class="p">$</span> clang --print-targets | grep ug24
+<span class="o">    ug24       - uG24 8-bit Microprocessor</span></pre>
+        </div>
+
+        <p>
+          At this point the compiler could not produce a single instruction. But
+          it knew the target existed, it would accept
+          <code>--target=ug24-unknown-none-eabi</code>, and the build was wired
+          end to end. Everything after this was filling in a shape that already
+          fit.
+        </p>
+
+        <h3>Telling the front end how wide things are</h3>
+
+        <p>
+          One small piece of this phase has an outsized effect later. The front
+          end needs to know, for this target, how big an <code>int</code> is,
+          how big a pointer is, and what each type's alignment is — written as a
+          terse <strong>data layout</strong> string:
+        </p>
+
+        <div class="cmd">
+          <div class="cmd-label">clang/lib/Basic/Targets/UG24.h</div>
+<pre>e-m:e-<span class="k">p:16:8</span>-i8:8-i16:8-i32:8-i64:8-f32:8-f64:8-a:8-n8:16-S8</pre>
+        </div>
+
+        <p>
+          <code>p:16:8</code> says pointers are 16 bits wide and aligned to 8
+          bits — one byte. Getting that second number wrong produced one of the
+          hardest bugs in the whole project, described in
+          <a href="#s14">phase&nbsp;11</a>.
+        </p>
+      </section>
+
+      <!-- =============================================== P3 ========= -->
+      <section id="s6">
+        <div class="sec-head"><span class="sec-num">P3</span><h2 class="sec">Machine code: describing 51 instructions once</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          The next phase deliberately skipped over compiling C and went
+          straight to the bottom of the stack: the exact bits.
+        </p>
+
+        <p>
+          Four separate tools need to agree about every instruction. The
+          assembler turns <code>adi r0, 1</code> into bits. The disassembler
+          turns bits back into <code>adi r0, 1</code>. The compiler emits the
+          same bits from its own internal form. The simulator reads them and
+          does the arithmetic. If any one of the four disagrees with the others,
+          you get a bug that looks like the wrong thing.
+        </p>
+
+        <p>
+          LLVM's answer is <strong>TableGen</strong>: a small declarative
+          language in which you describe each instruction once — its name, its
+          operands, its bit layout, how it prints — and from which the assembler,
+          disassembler, encoder and matcher are all generated. Disagreement
+          becomes structurally impossible.
+        </p>
+
+        <div class="cmd">
+          <div class="cmd-label">llvm/lib/Target/UG24/UG24InstrInfo.td — one instruction, described once</div>
+<pre><span class="k">def</span> ADI : FI_RI&lt;0b110, (outs GPR:$rd), (ins GPR:$rs, imm8:$imm),
+                 "adi\t$rd, $imm", [...]&gt;;</pre>
+        </div>
+
+        <p>
+          The uG24's instruction set has six encoding formats, chosen by the low
+          bits of the instruction word — a compact scheme that squeezes a useful
+          instruction set into two bytes each. All 51 encodings were transcribed
+          from the spreadsheet and each was given two tests: one checking that
+          the assembler produces the documented bits, and one checking that the
+          disassembler turns those bits back into the same instruction.
+        </p>
+
+        <div class="plain">
+          <span class="tag">Why start here</span>
+          <p>
+            Encodings are the one part of the project where an outside authority
+            says what "correct" means. Everything above this — which instruction
+            to choose, where to put a variable — is a judgement call. Nailing
+            down the layer that has a right answer first means that when
+            something later goes wrong, you already know it is not the bits.
+          </p>
+        </div>
+      </section>
+
+      <!-- =============================================== P4 ========= -->
+      <section id="s7">
+        <div class="sec-head"><span class="sec-num">P4</span><h2 class="sec">The register file, and the two we gave away</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          Registers are the handful of storage slots inside the processor that
+          instructions can name directly. The uG24 has sixteen of one byte each,
+          and the same silicon is also addressable as eight 16-bit pairs. The
+          compiler has to model that overlap precisely: writing to <code>R8</code>
+          changes the pair <code>W</code>, and the register allocator must never
+          believe otherwise.
+        </p>
+
+        <div class="tw">
+          <table>
+            <thead>
+              <tr><th class="mono">Pair</th><th class="mono">Bytes</th><th>Role</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="mono">P0, P1</td><td class="mono">R0–R3</td><td>Arguments and scratch; also where a 64-bit return spills to</td></tr>
+              <tr><td class="mono">P2, P3</td><td class="mono">R4–R7</td><td>Preserved across calls. <code>P3</code> doubles as the frame pointer when a function needs one</td></tr>
+              <tr><td class="mono">W</td><td class="mono">R8, R9</td><td>The 16-bit return value; also where <code>MUL</code> and <code>DIV</code> put their results</td></tr>
+              <tr><td class="mono">P5</td><td class="mono">R10, R11</td><td><code>R10</code> preserved; <code>R11</code> <strong>reserved</strong></td></tr>
+              <tr><td class="mono">DPTR1</td><td class="mono">R12, R13</td><td>Second 16-bit argument; second data pointer</td></tr>
+              <tr><td class="mono">DPTR0</td><td class="mono">R14, R15</td><td><strong>Reserved</strong> — the memory base register</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Why two registers had to be given up</h3>
+
+        <p>
+          <code>DPTR0</code> is reserved because of how the uG24 reaches memory.
+          Load and store do not take an address in the instruction; they take a
+          displacement, and read the base address from <code>DPTR0</code>. If
+          <code>DPTR0</code> were available to the register allocator, every
+          memory access would first have to shuffle a pointer into it and
+          possibly save whatever was there. Dedicating the pair costs two
+          registers and saves two instructions on every load and store in every
+          program.
+        </p>
+
+        <p>
+          <code>R11</code> is reserved as a scratch byte. The instructions that
+          add with carry take a register, not a constant, so 16-bit arithmetic
+          against a literal needs somewhere to put the literal's high byte —
+          often at a point, after register allocation, where there is provably
+          nothing free. One byte held permanently in reserve removes a whole
+          class of impossible situations.
+        </p>
+      </section>
+
+      <!-- =============================================== P5 ========= -->
+      <section id="s8">
+        <div class="sec-head"><span class="sec-num">P5</span><h2 class="sec">Instruction selection: fitting C onto an 8-bit ALU</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          This is the heart of a back end. The input is LLVM IR — a program
+          expressed in operations like "add these two 16-bit values" that no
+          processor necessarily has. The output is uG24 instructions.
+        </p>
+
+        <p>
+          LLVM's mechanism is pattern matching over a graph. Each IR operation
+          becomes a node; the back end supplies patterns saying "this shape of
+          node becomes this instruction"; a generated matcher finds the best
+          covering. Where a pattern exists, the work is one line of TableGen.
+          The interesting part is everything that has no pattern.
+        </p>
+
+        <h3>Three kinds of problem, three answers</h3>
+
+        <h4>Operations the ALU cannot do in one go</h4>
+
+        <p>
+          A 16-bit add has no single instruction. The answer is a
+          <strong>pseudo instruction</strong>: the matcher selects a placeholder
+          called <code>ADD16</code> that pretends to be one operation, the
+          register allocator assigns a real pair to it, and only afterwards does
+          a dedicated pass (<code>UG24ExpandPseudo</code>) split it into
+          <code>ADD</code> on the low bytes and <code>ADC</code> on the high
+          ones. Doing the split late means the allocator sees one operation on
+          one pair, rather than two operations on four separate bytes it might
+          scatter.
+        </p>
+
+        <h4>Operations the processor does not have at all</h4>
+
+        <p>
+          There is no 16-bit multiply, no division except 8-bit unsigned, no
+          floating point and no variable shift. For these the back end emits a
+          <strong>call to a helper function</strong> — a "libcall" — and the
+          helper is written in C in the runtime library. <code>a * b</code> on
+          two 16-bit values becomes <code>lja __mulhi3</code>, and
+          <code>__mulhi3</code> is a shift-and-add loop.
+        </p>
+
+        <h4>Operations whose result goes somewhere unusual</h4>
+
+        <p>
+          The hardware <code>MUL</code> writes its 16-bit product to
+          <code>W</code> implicitly — <code>W</code> is not one of its operands.
+          Comparisons set flags rather than producing a value. Both are handled
+          by selecting a pseudo with a normal-looking destination and rewriting
+          it after register allocation, so the ordinary machinery never has to
+          understand the irregularity.
+        </p>
+
+        <div class="note caution">
+          <span class="tag">A trap worth knowing about</span>
+          <p>
+            One optimisation in this area had to be deliberately removed. LLVM
+            has a rewrite that hoists a logic operation out of two identical
+            operands, and the back end had a rewrite that narrowed 16-bit logic
+            to 8-bit. Together they formed a loop: each undid the other, and the
+            compiler ran until it was killed. The fix is three lines and a long
+            comment explaining why, so that nobody re-adds it — which had
+            already happened once.
+          </p>
+        </div>
+      </section>
+
+      <!-- =============================================== P6 ========= -->
+      <section id="s9">
+        <div class="sec-head"><span class="sec-num">P6</span><h2 class="sec">Frames, calls, and an ABI nobody had written</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          When one function calls another, both sides need to agree on where
+          the arguments are, where the result comes back, and which registers
+          the callee is allowed to destroy. That agreement is the
+          <strong>calling convention</strong>, and it is part of a larger
+          agreement called the <strong>ABI</strong>.
+        </p>
+
+        <p>
+          On ARM or x86 the ABI is a published standard everybody implements.
+          For the uG24 no such document exists. So one was invented, written
+          down, and implemented in two places that must never drift apart: the
+          front end, which decides what goes by value and what goes by
+          reference, and the back end, which assigns the registers.
+        </p>
+
+        <div class="tw">
+          <table>
+            <thead>
+              <tr><th>What</th><th>Where it goes</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>8-bit arguments</td><td class="mono">R0, R1, R2, R3, then the stack</td></tr>
+              <tr><td>16-bit arguments and pointers</td><td class="mono">W, DPTR1, then the stack</td></tr>
+              <tr><td>Variadic calls (<code>printf</code>)</td><td>Everything on the stack, fixed arguments included</td></tr>
+              <tr><td>Return, up to 32 bits</td><td class="mono">W, then DPTR1</td></tr>
+              <tr><td>Return, 64 bits</td><td class="mono">W, DPTR1, P0, P1</td></tr>
+              <tr><td>Anything larger, and every struct</td><td>Through a hidden pointer the caller passes</td></tr>
+              <tr><td>Preserved across a call</td><td class="mono">R4, R5, R6, R7, R10</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>The return address problem</h3>
+
+        <p>
+          The uG24 has one link register, <code>RA</code>, and no hardware
+          stack for it. A call overwrites it. So a function that itself makes a
+          call must push <code>RA</code> on entry and pop it before returning,
+          while a function that makes none can skip both — worth doing, since
+          it is two instructions on every leaf function in the program.
+        </p>
+
+        <h3>Why variadic functions put everything on the stack</h3>
+
+        <p>
+          <code>printf("%d %d\n", a, b)</code> is a problem: the callee has no
+          idea how many arguments there are or what type they were. It walks
+          them in memory. If the first few had been passed in registers, the
+          callee would start reading from the wrong place. Passing
+          <em>everything</em> on the stack for a variadic call — including the
+          format string — is the one arrangement where both sides agree, and it
+          is why the convention has a special case for it.
+        </p>
+
+        <h3>The frame pointer, added late</h3>
+
+        <p>
+          Most functions address their local variables as offsets from the stack
+          pointer, which costs no register. A function containing a
+          variable-length array cannot: it moves the stack pointer <em>after</em>
+          the prologue, and every offset computed before that becomes wrong.
+          Those functions — and only those — take <code>P3</code> as a frame
+          pointer, set once and left alone.
+        </p>
+
+        <p>
+          This was missing for most of the project, and the bug it caused is in
+          <a href="#s14">phase&nbsp;11</a>.
+        </p>
+      </section>
+
+      <!-- =============================================== P7 ========= -->
+      <section id="s10">
+        <div class="sec-head"><span class="sec-num">P7</span><h2 class="sec">Linking: filling in the blanks</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          When the compiler processes one file it does not know where anything
+          will end up in memory. A call to a function in another file is emitted
+          with a hole where the address goes, plus a note saying "put the
+          address of <code>printf</code> here, as a 16-bit value". That note is
+          a <strong>relocation</strong>, and filling it in is the linker's job.
+        </p>
+
+        <p>
+          The uG24 needed seven relocation types. Two are unusual enough to be
+          worth explaining: because an instruction is only 16 bits and a full
+          address is 16 bits too, an address cannot be embedded in one
+          instruction. It is loaded a byte at a time, with the relocation
+          selecting which byte:
+        </p>
+
+        <div class="cmd">
+          <div class="cmd-label">Loading a 16-bit address into a register pair</div>
+<pre>mvi  r14, lo8(message)   <span class="p">; low byte  → R_UG24_LO8</span>
+mvi  r15, hi8(message)   <span class="p">; high byte → R_UG24_HI8</span></pre>
+        </div>
+
+        <h3>The memory map</h3>
+
+        <p>
+          The linker also needs to be told what the 64 KB actually looks like.
+          That description is the linker script, and it encodes several
+          decisions at once.
+        </p>
+
+        <figure>
+          <div class="fw">
+            <svg viewBox="0 0 700 318" role="img" xmlns="http://www.w3.org/2000/svg"
+                 aria-label="The 64 KB address space from 0x0000 to 0xFFFF: vector table, code and read-only data, initialised data, zeroed data, then the heap growing up and the stack growing down toward each other, with peripheral registers in the top page.">
+              <g font-family="IBM Plex Sans, system-ui, sans-serif">
+                <!-- bands -->
+                <rect x="150" y="14"  width="290" height="34" fill="var(--copper-bg)" stroke="var(--copper)"/>
+                <text x="295" y="36" text-anchor="middle" font-size="13" fill="var(--ink)" font-weight="600">vector table · 4 slots</text>
+
+                <rect x="150" y="48"  width="290" height="56" fill="var(--surface)" stroke="var(--rule)"/>
+                <text x="295" y="72" text-anchor="middle" font-size="13" fill="var(--ink)" font-weight="600">.text — your code, and crt0</text>
+                <text x="295" y="91" text-anchor="middle" font-size="12.5" fill="var(--faint)">.rodata — string literals, constants</text>
+
+                <rect x="150" y="104" width="290" height="34" fill="var(--surface)" stroke="var(--rule)"/>
+                <text x="295" y="126" text-anchor="middle" font-size="13" fill="var(--ink)">.data — globals with a starting value</text>
+
+                <rect x="150" y="138" width="290" height="34" fill="var(--surface)" stroke="var(--rule)"/>
+                <text x="295" y="160" text-anchor="middle" font-size="13" fill="var(--ink)">.bss — globals that start at zero</text>
+
+                <rect x="150" y="172" width="290" height="46" fill="var(--sunken)" stroke="var(--rule)"/>
+                <text x="295" y="193" text-anchor="middle" font-size="13" fill="var(--ink)">heap — malloc grows up ↓</text>
+                <text x="295" y="211" text-anchor="middle" font-size="13" fill="var(--ink)">stack grows down ↑</text>
+
+                <rect x="150" y="218" width="290" height="34" fill="var(--sunken)" stroke="var(--rule)"/>
+                <text x="295" y="240" text-anchor="middle" font-size="13" fill="var(--ink)">stack — 1 KB by default</text>
+
+                <rect x="150" y="252" width="290" height="40" fill="var(--trace-bg)" stroke="var(--trace)"/>
+                <text x="295" y="270" text-anchor="middle" font-size="13" fill="var(--ink)" font-weight="600">peripherals</text>
+                <text x="295" y="286" text-anchor="middle" font-size="12.5" fill="var(--faint)">UART · exit · interrupt controller</text>
+
+                <!-- addresses -->
+                <g font-family="IBM Plex Mono, monospace" font-size="12.5" fill="var(--faint)" text-anchor="end">
+                  <text x="140" y="26">0x0000</text>
+                  <text x="140" y="256">0xFF00</text>
+                  <text x="140" y="296">0xFFFF</text>
+                </g>
+
+                <!-- annotations -->
+                <g font-size="12.5" fill="var(--muted)">
+                  <text x="452" y="34">reset lands here</text>
+                  <text x="452" y="128">copied into place by crt0</text>
+                  <text x="452" y="162">zeroed by crt0</text>
+                  <text x="452" y="199">the simulator watches this gap</text>
+                  <text x="452" y="272">not memory — device registers</text>
+                </g>
+              </g>
+            </svg>
+          </div>
+          <figcaption>
+            One flat 64 KB shared by code and data. The heap and the stack grow
+            toward each other through the same free space, which is the classic
+            way a small embedded program corrupts itself; the linker script names
+            the boundary so the simulator can check it on every instruction.
+          </figcaption>
+        </figure>
+      </section>
+
+      <!-- =============================================== P8 ========= -->
+      <section id="s11">
+        <div class="sec-head"><span class="sec-num">P8</span><h2 class="sec">The runtime: what happens before <code>main</code></h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          On a desktop, a great deal happens between typing the program's name
+          and your first line running. Here, nothing does — unless you write it.
+          The startup file <code>crt0.s</code> is what the processor executes
+          out of reset, and it has four jobs before it can call
+          <code>main</code>:
+        </p>
+
+        <ol class="body-list">
+          <li><strong>Set the stack pointer.</strong> Until this happens there is nowhere to put a return address, so no function call is possible.</li>
+          <li><strong>Select the data pointer.</strong> One flag bit chooses which of the two pointer registers load and store use. The compiler assumes <code>DPTR0</code>; crt0 makes that true once, for the whole program.</li>
+          <li><strong>Zero <code>.bss</code>.</strong> C promises that a global without an initialiser starts at zero. Nothing zeroes memory for you, so a loop does it.</li>
+          <li><strong>Copy <code>.data</code>.</strong> A global that starts at 5 has that 5 stored somewhere in the program image; it has to be copied to where the variable lives.</li>
+        </ol>
+
+        <p>
+          Only then does it call <code>main</code>. When <code>main</code>
+          returns there is nothing to return to, so it halts.
+        </p>
+
+        <div class="plain">
+          <span class="tag">A detail that looks like waste</span>
+          <p>
+            In the current memory map, <code>.data</code>'s stored copy and its
+            run-time home are the same address, so the copy loop finds them
+            equal and exits immediately. It is there anyway: the moment the chip
+            is configured with separate program and data memories — which the
+            specification says is a per-SoC option — that loop starts doing real
+            work, with no change to the startup code. Writing it now costs a
+            dozen instructions and removes a future silent failure.
+          </p>
+        </div>
+
+        <h3>The library beneath the library</h3>
+
+        <p>
+          Alongside crt0 sits <code>libug24.a</code>, which holds every function
+          the back end can emit a call to. Some of it is what any C programmer
+          expects — <code>memcpy</code>, <code>strlen</code>. The rest is
+          arithmetic the processor cannot do: <code>__mulhi3</code>,
+          <code>__udivsi3</code>, <code>__muldi3</code>, <code>__addsf3</code>.
+          A C programmer never names these; the compiler emits the calls.
+        </p>
+
+        <div class="note caution">
+          <span class="tag">Why the runtime is built with <code>-ffreestanding -fno-builtin</code></span>
+          <p>
+            Without those flags the optimiser recognises the shift loop inside
+            <code>__ashlhi3</code> as "a shift", and rewrites it as a call to
+            <code>__ashlhi3</code>. The function calls itself forever. The flags
+            tell the compiler it may not assume the standard library exists —
+            which, while you are building it, it does not.
+          </p>
+        </div>
+      </section>
+
+      <!-- =============================================== P9 ========= -->
+      <section id="s12">
+        <div class="sec-head"><span class="sec-num">P9</span><h2 class="sec">The simulator, and why it mattered most</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          At this point the toolchain produced executables. Whether those
+          executables <em>did the right thing</em> was unknown, because there
+          was no uG24 to run them on.
+        </p>
+
+        <p>
+          So one was written: <code>ug24sim</code>, 810 lines of C that load an
+          ELF file into a 64 KB array and interpret instructions until the
+          program halts. It is not a model of the silicon — it is a model of
+          the specification, which is a meaningfully weaker thing and is
+          discussed under <a href="#s16">what this cannot tell us</a>.
+        </p>
+
+        <div class="cmd">
+          <div class="cmd-label">Compile and run, on a machine with no uG24 in it</div>
+<pre><span class="p">$</span> clang --target=ug24-unknown-none-eabi -Os hello.c -o hello.elf
+<span class="p">$</span> ug24sim hello.elf --quiet
+<span class="o">Hello ug24</span></pre>
+        </div>
+
+        <p>
+          This changed the character of the project completely. Before the
+          simulator, a bug looked like assembly that seemed plausible. After it,
+          a bug looked like a program printing <code>5 4</code> instead of
+          <code>5 5</code> — which is something you can bisect, minimise and
+          fix. Every wrong-code bug found in this project was found because
+          something could execute.
+        </p>
+
+        <h3>The two features that earn their keep</h3>
+
+        <p>
+          <strong>A UART and an exit register.</strong> Three addresses in the
+          top page: write a byte to <code>0xFF00</code> and it appears on the
+          terminal; write to <code>0xFF02</code> and the simulator exits with
+          that status. That is enough for <code>printf</code> to work and for a
+          test to report pass or fail.
+        </p>
+
+        <p>
+          <strong>A stack-window check.</strong> The simulator reads the heap
+          and stack boundaries out of the program's own symbol table and checks
+          the stack pointer after every single instruction. On real hardware, a
+          stack that grows into the heap corrupts data and the program carries
+          on producing wrong answers. Here it stops immediately with a message
+          naming the addresses. That check is how the variable-length-array bug
+          was caught the moment it happened rather than three functions later.
+        </p>
+
+        <div class="cmd">
+          <div class="cmd-label">What a caught stack overflow looks like</div>
+<pre><span class="o">5 4</span>
+<span class="o">stack overflow: sp=0004 fell below __heap_end=fafe</span></pre>
+        </div>
+      </section>
+
+      <!-- =============================================== P10 ======== -->
+      <section id="s13">
+        <div class="sec-head"><span class="sec-num">P10</span><h2 class="sec">A C library for a machine with no operating system</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          A compiler that cannot compile <code>printf("hello\n")</code> is not
+          much use to the person who has to write firmware with it. The standard
+          library on a normal system is mostly a thin layer over the operating
+          system; with no operating system, all of it has to be real code.
+        </p>
+
+        <div class="tw">
+          <table>
+            <thead>
+              <tr><th>Header</th><th>What was written</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="mono">&lt;stdio.h&gt;</td><td>The whole <code>printf</code> family — every conversion and flag, including <code>%f</code>, <code>%e</code> and <code>%g</code> — writing to the UART or to a buffer. No <code>scanf</code>: there is no input device.</td></tr>
+              <tr><td class="mono">&lt;stdlib.h&gt;</td><td><code>malloc</code>, <code>free</code>, <code>realloc</code> over the heap the linker script marks out; the string conversions; <code>qsort</code>; <code>abs</code> and <code>div</code>.</td></tr>
+              <tr><td class="mono">&lt;string.h&gt;</td><td>The <code>mem*</code> and <code>str*</code> functions, which the compiler also emits calls to on its own.</td></tr>
+              <tr><td class="mono">&lt;setjmp.h&gt;</td><td>Written in assembly, because a C function cannot see the return address the call left in a register, nor the stack pointer its own prologue has already moved.</td></tr>
+              <tr><td class="mono">&lt;ug24.h&gt;</td><td>Not standard: the peripheral registers and the interrupt controller, for code that talks to hardware directly.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Arithmetic the processor does not have</h3>
+
+        <p>
+          Underneath the library sits a second one nobody calls by name. A
+          64-bit multiply becomes <code>__muldi3</code>; a floating-point
+          addition becomes <code>__addsf3</code>. These were written to work in
+          terms of 16-bit limbs, because that is what the machine has, and
+          carefully enough that they never accidentally call themselves.
+        </p>
+
+        <div class="note">
+          <span class="tag">A decision worth knowing about</span>
+          <p>
+            On this target <code>double</code> is 32-bit IEEE single precision,
+            not 64-bit — the same choice AVR makes. It halves the size of the
+            floating-point library and doubles its speed, at the cost of
+            precision that an 8-bit microcontroller was never going to use well.
+            Code that genuinely needs 53 bits of mantissa will not get it here.
+          </p>
+        </div>
+
+        <h3>The cost of a feature, measured</h3>
+
+        <p>
+          <code>printf("Hello ug24\n")</code> produces a 300-byte program.
+          The same program with a <code>%f</code> and a float to put through it
+          is about 25 KB, because <code>%f</code> pulls in the soft-float
+          library, and the decimal conversion pulls in 64-bit division behind
+          it. On a 64 KB part that is a third of the address space.
+        </p>
+
+        <p>
+          So the float formatter is linked <em>on demand</em>. It is declared in
+          <code>printf</code>'s source but not defined there, marked weak; an
+          undefined weak symbol does not make the linker pull anything out of
+          the library. A program that does any floating-point arithmetic has
+          already pulled the float runtime in, and the formatter resolves. A
+          program that does none never pays for it.
+        </p>
+
+        <h3>Making a program smaller by 98%</h3>
+
+        <p>
+          One change in the driver is responsible for most of the size of every
+          program here. By default the linker's unit of work is the whole object
+          file: one call to <code>printf</code> drags in the entire formatter and
+          all the arithmetic behind it whether or not you used any of it.
+          Compiling each function into its own section and letting the linker
+          discard unreferenced sections changes the unit to the function.
+        </p>
+
+        <div class="tw">
+          <table>
+            <thead>
+              <tr><th>Program</th><th class="mono">Without</th><th class="mono">With</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>printf("Hello ug24\n")</code></td><td class="mono">15,102 bytes</td><td class="mono">300 bytes</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- =============================================== P11 ======== -->
+      <section id="s14">
+        <div class="sec-head"><span class="sec-num">P11</span><h2 class="sec">Finding the bugs: three layers, three real failures</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          A compiler is a program whose bugs are other people's mysteries. If it
+          produces subtly wrong code, the person debugging it is looking at
+          <em>their</em> source, which is correct. So the testing here is
+          deliberately layered, and each layer catches a class of bug the layer
+          below it structurally cannot see.
+        </p>
+
+        <figure>
+          <div class="fw">
+            <svg viewBox="0 0 900 262" role="img" xmlns="http://www.w3.org/2000/svg"
+                 aria-label="Three testing layers. Encoding tests check bits but cannot see whether a program computes the right answer. Execution tests run one function each and catch wrong arithmetic. Whole-program tests at five optimisation levels catch bugs that appear only at one level.">
+              <g font-family="IBM Plex Sans, system-ui, sans-serif">
+
+                <!-- layer 1 -->
+                <rect x="0" y="10" width="270" height="72" rx="4" fill="var(--surface)" stroke="var(--rule)"/>
+                <text x="16" y="34" font-size="13.5" font-weight="600" fill="var(--ink)">12 encoding tests</text>
+                <text x="16" y="53" font-size="12.5" fill="var(--faint)">assemble · disassemble · compile</text>
+                <text x="16" y="70" font-size="12.5" fill="var(--faint)">one instruction at a time</text>
+
+                <text x="292" y="34" font-size="13" fill="var(--muted)">Can see: wrong bits, a missing pattern,</text>
+                <text x="292" y="52" font-size="13" fill="var(--muted)">a branch out of range.</text>
+                <text x="292" y="74" font-size="13" fill="var(--copper)">Cannot see: whether the program is right.</text>
+
+                <!-- layer 2 -->
+                <rect x="0" y="96" width="270" height="72" rx="4" fill="var(--sunken)" stroke="var(--rule)"/>
+                <text x="16" y="120" font-size="13.5" font-weight="600" fill="var(--ink)">40 execution cases</text>
+                <text x="16" y="139" font-size="12.5" fill="var(--faint)">compile · link · run · compare</text>
+                <text x="16" y="156" font-size="12.5" fill="var(--faint)">one small function each</text>
+
+                <text x="292" y="120" font-size="13" fill="var(--muted)">Can see: wrong arithmetic, a lost argument,</text>
+                <text x="292" y="138" font-size="13" fill="var(--muted)">a corrupted return.</text>
+                <text x="292" y="160" font-size="13" fill="var(--copper)">Cannot see: what only whole programs do.</text>
+
+                <!-- layer 3 -->
+                <rect x="0" y="182" width="270" height="72" rx="4" fill="var(--copper-bg)" stroke="var(--copper)" stroke-width="1.5"/>
+                <text x="16" y="206" font-size="13.5" font-weight="600" fill="var(--ink)">15 programs × 5 levels</text>
+                <text x="16" y="225" font-size="12.5" fill="var(--faint)">diffed against the same source</text>
+                <text x="16" y="242" font-size="12.5" fill="var(--faint)">built by the host compiler</text>
+
+                <text x="292" y="206" font-size="13" fill="var(--muted)">Can see: everything above, plus bugs that</text>
+                <text x="292" y="224" font-size="13" fill="var(--muted)">appear at one optimisation level only,</text>
+                <text x="292" y="242" font-size="13" fill="var(--muted)">and disagreements with ordinary C.</text>
+              </g>
+            </svg>
+          </div>
+          <figcaption>
+            The third layer is the one that pays. Most of its expected output is
+            generated by compiling the same source with the host compiler, so a
+            failure means "the uG24 and a normal C implementation disagree" —
+            a statement about correctness, not about this toolchain's own
+            opinion of itself.
+          </figcaption>
+        </figure>
+
+        <h3>Bug one: <code>%s</code> printed one byte late</h3>
+
+        <p>
+          Strings came out as garbage, and the amount of garbage depended on how
+          many local variables the calling function had. That last part is the
+          clue: the bug was not in <code>printf</code>, it was in where the
+          arguments had been put.
+        </p>
+
+        <p>
+          The data-layout string said pointers were aligned to two bytes; the
+          front end said one. When <code>printf</code> walked its variadic
+          arguments it rounded the list pointer up to an even address, and the
+          caller had not. Whenever the preceding argument happened to end on an
+          odd address, every argument after it was read one byte late. Changing
+          <code>p:16:16</code> to <code>p:16:8</code> fixed it — a four-character
+          edit for a bug that had looked like a broken library.
+        </p>
+
+        <h3>Bug two: a variable-length array returned into the stack</h3>
+
+        <p>
+          A function with both a normal local and a <code>char buf[n]</code>
+          printed the right answers and then jumped somewhere meaningless. The
+          simulator's stack check caught it on the instruction it happened.
+        </p>
+
+        <p>
+          The cause was the missing frame pointer. Allocating the array moved
+          the stack pointer; the epilogue restored it by adding back only what
+          the prologue had subtracted; the difference was still there when
+          <code>RA</code> was popped, so the function returned to whatever
+          happened to be at that address. The fix is described in
+          <a href="#s9">phase&nbsp;6</a>: a function like this takes
+          <code>P3</code> as a frame pointer, and the epilogue restores the
+          stack pointer from it.
+        </p>
+
+        <h3>Bug three: <code>a &gt;&gt; 32</code> gave the wrong half, only without optimisation</h3>
+
+        <p>
+          This one is the reason the third layer runs at five optimisation
+          levels. Taking the top half of a 64-bit local returned the
+          <em>bottom</em> half — at <code>-O0</code>. At every other level it
+          was correct, which is the opposite of the usual pattern and made it
+          look like a fluke.
+        </p>
+
+        <p>
+          The chain took a while to unpick. LLVM's frame code has a flag saying
+          whether the target can realign the stack; it defaults to yes, and
+          nothing here had said otherwise. Because it was yes, the frame
+          bookkeeping kept the alignment an <code>unsigned long long</code>
+          would <em>prefer</em> — eight bytes — rather than the one byte this
+          stack can actually promise. A later analysis asked "what do I know
+          about the low bits of this slot's address?", was told they were zero,
+          and passed that on. Then a routine that computes <code>base + 6</code>
+          saw it could use a bitwise OR instead of an add, because OR is
+          identical when the bits do not overlap.
+        </p>
+
+        <p>
+          On a byte-granular stack they do overlap. <code>base | 6</code> landed
+          on the wrong slot and read back a different limb of the same variable.
+          One line — declaring the stack not realignable — removed the whole
+          chain.
+        </p>
+
+        <div class="note">
+          <span class="tag">What this says about the method</span>
+          <p>
+            Nothing short of running a real program, at a level nobody normally
+            ships, would have found this. It was not in the code that was
+            changed; it had been latent since the data layout was written, and
+            surfaced only when 64-bit arithmetic was added and gave it something
+            to be wrong about.
+          </p>
+        </div>
+      </section>
+
+      <!-- =============================================== P12 ======== -->
+      <section id="s15">
+        <div class="sec-head"><span class="sec-num">P12</span><h2 class="sec">Making it configurable, and adding interrupts</h2></div>
+        <div class="sec-rule"></div>
+
+        <h3>Parts that do not all have the same hardware</h3>
+
+        <p>
+          The specification says the multiplier and the divider are optional
+          blocks: a customer's system-on-chip may leave either out. A compiler
+          that emits <code>mul</code> unconditionally produces code that such a
+          part cannot execute.
+        </p>
+
+        <p>
+          So both became <strong>subtarget features</strong>. They default to
+          present, since that is what the documents describe;
+          <code>-mcpu=ug24-base</code> compiles for a part with neither, and the
+          same operations quietly become calls to the runtime helpers — which
+          are shift-and-add loops and need no hardware of their own, so the
+          library does not have to be rebuilt to match. The assembler rejects
+          <code>mul</code> in that configuration too, rather than encoding
+          something the part cannot run.
+        </p>
+
+        <h3>Interrupts, and a model built on a guess</h3>
+
+        <p>
+          An interrupt is the hardware stopping your program mid-instruction to
+          run a handler, then resuming as if nothing happened. For a
+          microcontroller it is the central feature — it is how a chip responds
+          to a timer, a button, an arriving byte.
+        </p>
+
+        <p>
+          Making a handler work is mostly a compiler problem. An ordinary
+          function is allowed to destroy half the registers, because its caller
+          knew that and saved what it needed. A handler has no caller: it
+          interrupted code that was in the middle of something and expects every
+          register back. So <code>__attribute__((interrupt))</code> makes the
+          compiler preserve everything the handler writes — including the two
+          reserved registers, which the ordinary machinery cannot even see —
+          and return by the interrupt's own route rather than through
+          <code>RA</code>.
+        </p>
+
+        <div class="note caution">
+          <span class="tag">This part rests on assumptions</span>
+          <p>
+            The specification names the interrupt enable bits and nothing else.
+            Where the vector table lives, what the hardware pushes when it takes
+            an interrupt, how a source is acknowledged — none of it is written
+            down. A coherent model was implemented using only instructions and
+            flag bits the specification does define, and every assumption in it
+            is listed in <code>docs/uG24-assumptions.md</code>.
+          </p>
+          <p>
+            This is the most dangerous item in the project, precisely because it
+            works. Handlers compile, run and pass their tests under the assumed
+            model; if the model is wrong they will fail on silicon and the
+            symptom will not point here.
+          </p>
+        </div>
+      </section>
+
+      <!-- =============================================== 04 ========= -->
+      <section id="s16">
+        <div class="sec-head"><span class="sec-num">04</span><h2 class="sec">Where it stands</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          Ordinary C compiles and runs. Every construct in the language is
+          covered by a program that executes and is diffed against the same
+          source built by a normal compiler.
+        </p>
+
+        <div class="tw">
+          <table>
+            <thead>
+              <tr><th>Area</th><th>State</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>C language, C17</td><td><span class="pill done">works</span></td><td>Structs, unions, bit-fields, <code>_Complex</code>, variable-length arrays, <code>alloca</code>, <code>setjmp</code>, function pointers, recursion, varargs</td></tr>
+              <tr><td>Integer arithmetic</td><td><span class="pill done">works</span></td><td>8 to 64 bits, signed and unsigned, including divide and remainder</td></tr>
+              <tr><td>Floating point</td><td><span class="pill done">works</span></td><td>Single precision only; <code>double</code> is <code>float</code></td></tr>
+              <tr><td>Standard library</td><td><span class="pill done">works</span></td><td>stdio, stdlib, string, setjmp. No <code>scanf</code> — no input device</td></tr>
+              <tr><td>Optional hardware</td><td><span class="pill done">works</span></td><td><code>-mcpu=ug24-base</code> for a part without multiply or divide</td></tr>
+              <tr><td>Debug information</td><td><span class="pill gap">partial</span></td><td>Line tables are emitted and readable; variable locations have had no work</td></tr>
+              <tr><td>Jump tables</td><td><span class="pill gap">partial</span></td><td>A <code>switch</code> becomes a compare-and-branch chain; the indirect-jump instructions are not selected</td></tr>
+              <tr><td>Interrupts</td><td><span class="pill assume">assumed</span></td><td>Complete implementation resting on an assumed hardware model</td></tr>
+              <tr><td>Peripheral map</td><td><span class="pill assume">assumed</span></td><td>The UART, exit register and interrupt controller were placed by this toolchain, not by the chip</td></tr>
+              <tr><td>C++</td><td><span class="pill gap">not started</span></td><td>No library, no exceptions, no static-initialisation support</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>What this testing cannot tell us</h3>
+
+        <p>
+          Every result above was produced by a simulator written from the same
+          documents as the compiler. If both misread the same sentence, both
+          agree and the tests pass. That is not a hypothetical concern — three
+          open questions would silently invalidate generated code if the answers
+          differ from what was assumed:
+        </p>
+
+        <div class="tw">
+          <table>
+            <thead>
+              <tr><th class="mono">Query</th><th>Question</th><th>What breaks if the answer differs</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="mono">I2</td><td>Is there a load-use delay?</td><td>The compiler emits a load followed immediately by a use of the loaded register constantly. If the hardware needs a gap, essentially every function is wrong.</td></tr>
+              <tr><td class="mono">I1</td><td>Is the pipeline fully interlocked?</td><td>No fences are inserted anywhere. Failures would look like intermittent, data-dependent flakiness rather than compiler bugs.</td></tr>
+              <tr><td class="mono">I3</td><td>Which PC does <code>MOV Xd, PC</code> read?</td><td>The indirect call computes its return address from it. If the answer differs, every call through a function pointer returns into the middle of an instruction.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          The single most valuable thing the hardware team could provide is not
+          an answer to any one of these. It is an executable model of the core —
+          then the simulator stops being an assumption and starts being
+          something checkable, and all fifty-one queries can be settled by
+          experiment.
+        </p>
+      </section>
+
+      <!-- =============================================== 05 ========= -->
+      <section id="s17">
+        <div class="sec-head"><span class="sec-num">05</span><h2 class="sec">Where everything lives</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          One repository holds all of it, so a clone is the whole delivery and
+          the compiler cannot drift from the runtime it needs.
+        </p>
+
+        <div class="tw">
+          <table>
+            <thead>
+              <tr><th>Path</th><th>What is there</th><th class="mono">Lines</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="mono">llvm/lib/Target/UG24/</td><td>The back end: instruction descriptions, selection, register allocation support, frame layout, encoder, assembler, disassembler</td><td class="mono">6,111</td></tr>
+              <tr><td class="mono">clang/lib/…/UG24.*</td><td>Type sizes and the data layout; the C ABI; the driver that knows how to link a uG24 program</td><td class="mono">606</td></tr>
+              <tr><td class="mono">lld/ELF/Arch/UG24.cpp</td><td>Relocation handling in the linker</td><td class="mono">121</td></tr>
+              <tr><td class="mono">ug24-runtime/</td><td>crt0, the linker script, the helper library, the C library, the headers</td><td class="mono">2,484</td></tr>
+              <tr><td class="mono">ug24-sim/ug24sim.c</td><td>The instruction-set simulator</td><td class="mono">810</td></tr>
+              <tr><td class="mono">ug24-tests/</td><td>40 execution cases and the 15-program acceptance suite</td><td class="mono">1,039</td></tr>
+              <tr><td class="mono">docs/</td><td>Machine description, assumptions, the specification queries, the build procedure, this handbook</td><td class="mono">—</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>The other documents</h3>
+
+        <div class="tw">
+          <table>
+            <thead>
+              <tr><th>Document</th><th>Read it when</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><a href="index.html">uG24 Toolchain Handbook</a></td><td>You want to compile and run something today</td></tr>
+              <tr><td><a href="build-from-scratch.html">Five Compilers From Scratch</a></td><td>You are rebuilding the whole toolchain on a new machine</td></tr>
+              <tr><td><code>docs/uG24-machine-description.md</code></td><td>You need the exact encodings, register file or flag layout</td></tr>
+              <tr><td><code>docs/uG24-assumptions.md</code></td><td>You are checking what was decided rather than established — read this before trusting anything on silicon</td></tr>
+              <tr><td><code>docs/uG24_Specification_Queries_ANSWERED.md</code></td><td>You are the person who can answer the questions</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- =============================================== 06 ========= -->
+      <section id="s18">
+        <div class="sec-head"><span class="sec-num">06</span><h2 class="sec">Glossary</h2></div>
+        <div class="sec-rule"></div>
+
+        <p>
+          Terms used above, in the sense they are used here.
+        </p>
+
+        <dl class="gloss">
+          <div><dt>ABI</dt><dd>Application Binary Interface. The agreement about how compiled code fits together: where arguments go, how big types are, what a function may destroy. Two compilers that disagree produce code that cannot be linked safely.</dd></div>
+          <div><dt>Assembler</dt><dd>Turns human-readable instruction text into machine code. The inverse of a disassembler.</dd></div>
+          <div><dt>Back end</dt><dd>The processor-specific half of a compiler: chooses instructions, allocates registers, lays out stack frames, writes the bits.</dd></div>
+          <div><dt>Calling convention</dt><dd>The part of the ABI that says where arguments and return values live, and which registers survive a call.</dd></div>
+          <div><dt>Cross compiler</dt><dd>A compiler that runs on one kind of machine and produces code for another. Everything here runs on an x86-64 PC and produces uG24 code.</dd></div>
+          <div><dt>ELF</dt><dd>The file format for compiled objects and executables on Linux and on most embedded targets. Carries code, data, symbol names and relocations.</dd></div>
+          <div><dt>Front end</dt><dd>The language-specific half: reads C, reports errors, produces IR. Knows almost nothing about the target processor.</dd></div>
+          <div><dt>IR</dt><dd>Intermediate Representation. A simplified, processor-independent form of the program, and where optimisation happens.</dd></div>
+          <div><dt>Libcall</dt><dd>A call the compiler inserts on your behalf to a helper function, for an operation the processor cannot do — a 64-bit multiply, a floating-point add.</dd></div>
+          <div><dt>Linker</dt><dd>Joins compiled pieces into one executable and fills in every address that was unknown when each piece was compiled.</dd></div>
+          <div><dt>Linker script</dt><dd>The file that tells the linker what the memory looks like and where each kind of content goes.</dd></div>
+          <div><dt>MMIO</dt><dd>Memory-mapped I/O. Addresses that are not memory but device registers: writing to <code>0xFF00</code> sends a byte to the serial port.</dd></div>
+          <div><dt>Prologue / epilogue</dt><dd>The instructions a function runs on entry and exit to set up and tear down its stack frame.</dd></div>
+          <div><dt>Pseudo instruction</dt><dd>A placeholder the compiler uses internally that looks like one instruction and is replaced by several real ones later, after register allocation.</dd></div>
+          <div><dt>Register allocation</dt><dd>Deciding which of the processor's few registers holds which of the program's many values at each point, and spilling the rest to memory.</dd></div>
+          <div><dt>Relocation</dt><dd>A note in an object file saying "an address goes here, and this is which address and in what form". The linker acts on them.</dd></div>
+          <div><dt>Simulator (ISS)</dt><dd>A program that pretends to be the processor, executing its instructions one at a time. Here it is <code>ug24sim</code>, and it is the only thing that has ever run uG24 code.</dd></div>
+          <div><dt>Soft float</dt><dd>Floating-point arithmetic done by library functions because the processor has no floating-point hardware.</dd></div>
+          <div><dt>Subtarget feature</dt><dd>An optional piece of hardware that some members of a processor family have and others do not — here, the multiplier and the divider.</dd></div>
+          <div><dt>TableGen</dt><dd>LLVM's declarative language for describing a processor once and generating the assembler, disassembler, encoder and pattern matcher from that one description.</dd></div>
+          <div><dt>Triple</dt><dd>The string identifying a target: <code>ug24-unknown-none-eabi</code> is a uG24, no vendor, no operating system.</dd></div>
+        </dl>
+      </section>
+
+      <footer>
+        <p>
+          uG24 toolchain · LLVM 17.0.6 · <code>ug24-unknown-none-eabi</code>.
+          Companion to <a href="index.html">the toolchain handbook</a> and
+          <a href="build-from-scratch.html">the build procedure</a>. Figures in
+          this document were measured against the repository at the time of
+          writing; the test counts are 12 lit tests, 40 execution cases and 15
+          acceptance programs at five optimisation levels.
+        </p>
+      </footer>
+
+    </main>
+  </div>
+</div>
