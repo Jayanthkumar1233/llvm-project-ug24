@@ -40,10 +40,14 @@ typedef unsigned long u32;
 // that does any at all has already pulled ug24_float.c in for __addsf3 and
 // friends, and the symbol resolves to the real formatter.
 //
-// The gap is a program that prints a floating-point *constant* and does no
-// arithmetic, where the optimiser has folded everything away.  Link that
-// with -Wl,-u,__ug24_format_float: an explicit undefined symbol is a strong
-// one and does pull the member in.
+// That rule alone is not quite enough.  A program whose floating-point
+// arithmetic the optimiser folds away -- printf("%f", 879 * 9 / 50.0f) is one
+// constant by the time the linker sees it -- needs the formatter and pulls
+// nothing in, and used to print "<fp?>".  UG24AsmPrinter closes that: it
+// emits an undefined reference to this symbol from any translation unit that
+// passes a floating-point value to a variadic function, which is the one
+// thing that makes %f meaningful.  -Wl,-u,__ug24_format_float still works and
+// is no longer needed.
 __attribute__((weak)) int __ug24_format_float(char *out, unsigned long bits,
                                               int precision, char conv);
 

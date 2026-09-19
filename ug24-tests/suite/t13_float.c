@@ -68,6 +68,38 @@ int main(void) {
     printf("e %.3e %.3e\n", 1.5f, -8192.0f);
     printf("w |%10.2f|%-10.2f|\n", 1.25f, 1.25f);
 
+    /* Digits, against a hosted printf.
+     *
+     * Two separate things are being checked here.  The values are printed at
+     * several precisions and diffed against glibc, which catches a formatter
+     * that is merely close -- the fraction is generated from the mantissa by
+     * exact integer arithmetic, and an earlier version that multiplied the
+     * float by ten repeatedly printed 1144.22f as 1144.219970 where the value
+     * rounds to 1144.219971.
+     *
+     * And the whole first expression folds to a constant at compile time, so
+     * the program contains no floating-point arithmetic at all.  That is the
+     * case where nothing drags the float runtime out of libug24.a, and where
+     * %f used to print "<fp?>".  The compiler now asks for the formatter
+     * whenever a float reaches a variadic call. */
+    {
+        float folded = 879 * 9 / 50.0f + 52 + 934 * 8 / 8.0f;
+        volatile float values[8];
+        int i;
+
+        printf("folded %f\n", (double)folded);
+
+        values[0] = 0.1f;        values[1] = 1.0f / 3.0f;
+        values[2] = 1144.22f;    values[3] = 123456.789f;
+        values[4] = 0.999999f;   values[5] = 1e9f;
+        values[6] = 0.0625f;     values[7] = -1144.22f;
+
+        for (i = 0; i < 8; i++)
+            printf("d %.6f %.0f %.1f %.9f %.2f\n",
+                   (double)values[i], (double)values[i], (double)values[i],
+                   (double)values[i], (double)values[i]);
+    }
+
     printf("PASS - soft float\n");
     return 0;
 }

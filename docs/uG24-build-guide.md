@@ -282,12 +282,11 @@ next to the `.expected` it did not match.
 - **Double precision.** `double` and `long double` are IEEE *single* on this
   target, the same choice AVR makes. Code that needs 53 bits of mantissa
   will not get it.
-- **`%a`** in `printf` prints `<fp?>`. So does `%f` in a program that prints
-  a floating-point constant and does no arithmetic at all — the float runtime
-  is linked on demand, and such a program needs none of it. Link with
-  `-Wl,-u,__ug24_format_float` to force it in. Be aware of what it costs:
-  `printf("Hello ug24\n")` is 300 bytes and the same program with a real
-  `%f` is about 25 KB.
+- **`%a`** in `printf` prints `<fp?>`. Every other conversion works, `%f`
+  included, and `%f` agrees with a hosted `printf` digit for digit. Be aware
+  of what it costs: `printf("Hello ug24\n")` is 300 bytes and the same
+  program with a `%f` is about 24 KB, because the float runtime is linked on
+  demand and a program that prints one needs it.
 - **`scanf` and friends.** There is no input device to read from.
 - **C++.** The runtime is C only: no `libc++`, no exceptions, no static
   initialisation order support. C is complete through C17 apart from the

@@ -193,11 +193,14 @@ calls, provided by `ug24-runtime/`:
 AVR makes, so the double-precision half of the soft-float library does not
 exist and is never asked for: there is no `__adddf3` and no `__extendsfdf2`.
 
-Rounding is IEEE round-to-nearest, ties to even. `printf`'s `%f`, `%e` and
-`%g` produce their digits by repeated
-multiplication by ten in single precision, so beyond about seven significant
-digits the last one may be off by one — which is all the precision a `float`
-carries anyway.
+Rounding is IEEE round-to-nearest, ties to even.
+
+`printf`'s `%f` produces its digits by exact integer arithmetic on the
+mantissa and the exponent, and agrees with a hosted `printf` digit for digit
+at any precision. `%e` and `%g` still normalise by repeated multiplication by
+ten in single precision, so beyond about seven significant digits their last
+digit may be off by one — which is all the precision a `float` carries
+anyway.
 
 `%a` is not implemented; it prints `<fp?>` and consumes its argument.
 
@@ -210,14 +213,22 @@ already pulled `ug24_float.c` in for `__addsf3` and the symbol resolves.
 
 That matters because the difference is not small. `printf("Hello ug24\n")`
 is 300 bytes. The same program with a `%f` and a float to put through it is
-about 25 KB, once the soft-float library, the 64-bit division behind the
-decimal conversion and the 4.5 KB formatter are all linked. On a 64 KB part
-that is worth not paying for by default.
+about 24 KB, once the formatter and the soft-float library behind `%e` are
+linked. On a 64 KB part that is worth not paying for by default.
 
-The gap is a program that prints a floating-point *constant* and does no
-arithmetic, where the optimiser has folded everything away before the linker
-sees it. Link that with `-Wl,-u,__ug24_format_float`: an explicit undefined
-symbol is a strong one and does pull the member in.
+That rule on its own has a hole. A program whose floating-point arithmetic
+the optimiser folds away needs the formatter and pulls nothing in:
+
+```c
+printf("%f\n", 879 * 9 / 50.0f + 52);   /* one constant by link time */
+```
+
+`UG24AsmPrinter` closes it. A floating-point value passed in the variadic
+part of an argument list is the one thing that makes `%f` meaningful, and it
+is still visible in the IR when the object file is written, so any
+translation unit that does it emits an undefined *global* reference to
+`__ug24_format_float` — which is what `-Wl,-u` does, decided per translation
+unit instead of per link. The flag still works and is no longer needed.
 
 ### 3.9 Optional multiplier and divider
 `MUL` and `DIV` are optional blocks in the SoC configuration. They are present
