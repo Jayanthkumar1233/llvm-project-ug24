@@ -28,7 +28,7 @@ mkdir -p "$OUT"
 
 # -ffreestanding -fno-builtin keeps the optimiser from turning the helper
 # loops back into calls to the very helpers being defined.
-for SRC in ug24_builtins ug24_int64 ug24_float ug24_io ug24_stdio ug24_stdlib; do
+for SRC in ug24_builtins ug24_int64 ug24_float ug24_printf_float ug24_io ug24_stdio ug24_stdlib; do
     # -ffunction-sections/-fdata-sections give each routine its own section, so
     # a link with --gc-sections can drop the ones a program never calls.
     # Without them the archive member is the unit of linking and one call to
@@ -45,7 +45,8 @@ done
     "$ROOT/ug24-runtime/ug24_setjmp.s" -o "$TMP/ug24_setjmp.o"
 
 "$BIN/llvm-ar" rcs "$OUT/libug24.a" "$TMP/ug24_builtins.o" \
-    "$TMP/ug24_int64.o" "$TMP/ug24_float.o" "$TMP/ug24_io.o" \
+    "$TMP/ug24_int64.o" "$TMP/ug24_float.o" "$TMP/ug24_printf_float.o" \
+    "$TMP/ug24_io.o" \
     "$TMP/ug24_stdio.o" "$TMP/ug24_stdlib.o" "$TMP/ug24_setjmp.o"
 
 "$BIN/llvm-mc" -triple=ug24-unknown-none-eabi -filetype=obj \

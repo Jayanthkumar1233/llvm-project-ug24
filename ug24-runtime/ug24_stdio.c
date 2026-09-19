@@ -26,38 +26,15 @@ typedef unsigned long u32;
 // Floating-point conversion
 //===----------------------------------------------------------------------===//
 //
-// The formatter is in ug24_float.c, alongside the arithmetic it needs, so
-// that a program with no floating point in it links neither: a "Hello" that
-// prints no float is 300 bytes, and the same program with %f and a float to
-// put through it is about 25 KB once the soft-float library, the 64-bit
-// division behind the decimal conversion and the formatter itself are all
-// pulled in.  On a 64 KB part that is worth not paying for by default.
-//
-// Declared weak and *not defined here*, which is what makes the choice
-// automatic: an undefined weak symbol does not cause the linker to pull a
-// member out of libug24.a, so a program that never does any floating-point
-// arithmetic leaves this null and gets the placeholder below.  A program
-// that does any at all has already pulled ug24_float.c in for __addsf3 and
-// friends, and the symbol resolves to the real formatter.
-//
-// That rule alone is not quite enough.  A program whose floating-point
-// arithmetic the optimiser folds away -- printf("%f", 879 * 9 / 50.0f) is one
-// constant by the time the linker sees it -- needs the formatter and pulls
-// nothing in, and used to print "<fp?>".  UG24AsmPrinter closes that: it
-// emits an undefined reference to this symbol from any translation unit that
-// passes a floating-point value to a variadic function, which is the one
-// thing that makes %f meaningful.  -Wl,-u,__ug24_format_float still works and
-// is no longer needed.
-__attribute__((weak)) int __ug24_format_float(char *out, unsigned long bits,
-                                              int precision, char conv);
+// The conversion itself is in ug24_printf_float.c.  It is referenced normally
+// -- not weakly -- because it needs no floating-point arithmetic of its own:
+// a float is exactly mant x 2^(exp-23), so %f comes out of shifts and a
+// multiply by ten.  Linking it with printf costs its own code and nothing
+// else.  The soft-float library is only reached for %e, which that file
+// delegates to a weak symbol.
 
-static int format_float_placeholder(char *out) {
-  static const char placeholder[] = "<fp?>";
-  int i;
-  for (i = 0; placeholder[i]; i++)
-    out[i] = placeholder[i];
-  return i;
-}
+int __ug24_format_float(char *out, unsigned long bits, int precision,
+                        char conv);
 
 //===----------------------------------------------------------------------===//
 // Output sink: either the UART or a caller-supplied buffer.
@@ -294,9 +271,7 @@ static int format(Sink *sink, const char *fmt, va_list ap) {
       int length;
 
       value.d = va_arg(ap, double);
-      length = __ug24_format_float
-                   ? __ug24_format_float(buffer, value.bits, precision, conv)
-                   : format_float_placeholder(buffer);
+      length = __ug24_format_float(buffer, value.bits, precision, conv);
 
       if (!flags.left) sink_pad(sink, flags.zero ? '0' : ' ', width - length);
       for (int i = 0; i < length; i++)

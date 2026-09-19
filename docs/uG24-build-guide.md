@@ -248,6 +248,15 @@ rather than against itself:
 ./ug24-tests/suite/run-suite.sh t13_float  # just one
 ```
 
+**The spreadsheet check.** Independent of all three: it reads the vendor ISA
+spreadsheet, rebuilds each instruction's encoding from the bit columns, and
+compares that with what `llvm-mc` emits. Nothing the toolchain believes about
+itself is involved — no simulator, no runtime, no expected-output file.
+
+```bash
+./ug24-tests/verify-against-isa-xlsx.py
+```
+
 | Program | Covers |
 | :--- | :--- |
 | `t1_types` | integer widths, signedness, conversions |
@@ -282,11 +291,14 @@ next to the `.expected` it did not match.
 - **Double precision.** `double` and `long double` are IEEE *single* on this
   target, the same choice AVR makes. Code that needs 53 bits of mantissa
   will not get it.
-- **`%a`** in `printf` prints `<fp?>`. Every other conversion works, `%f`
-  included, and `%f` agrees with a hosted `printf` digit for digit. Be aware
-  of what it costs: `printf("Hello ug24\n")` is 300 bytes and the same
-  program with a `%f` is about 24 KB, because the float runtime is linked on
-  demand and a program that prints one needs it.
+- **`%a`** in `printf` prints `<fp?>`, and so does `%e` in a program that does
+  no floating-point arithmetic at all — `%e` needs the soft-float library and
+  such a program does not link it. `%f` always works, and agrees with a hosted
+  `printf` digit for digit.
+- **`printf` costs about 15 KB** once any conversion is used, of which roughly
+  6.8 KB is the float formatter. Programs that never print a float can get
+  that back by defining `__ug24_format_float` themselves — see §3.8 of
+  [uG24-assumptions.md](uG24-assumptions.md).
 - **`scanf` and friends.** There is no input device to read from.
 - **C++.** The runtime is C only: no `libc++`, no exceptions, no static
   initialisation order support. C is complete through C17 apart from the

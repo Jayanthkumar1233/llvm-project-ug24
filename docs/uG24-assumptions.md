@@ -204,31 +204,65 @@ anyway.
 
 `%a` is not implemented; it prints `<fp?>` and consumes its argument.
 
-The `printf` float formatter lives in `ug24_float.c` rather than in
-`ug24_stdio.c`, and `ug24_stdio.c` declares it **weak and does not define
-it**. An undefined weak symbol does not make the linker pull a member out of
-`libug24.a`, so a program that never does any floating-point arithmetic
-leaves it null and `%f` prints `<fp?>`; a program that does any at all has
-already pulled `ug24_float.c` in for `__addsf3` and the symbol resolves.
+The `printf` decimal conversion is split across two files, and the split is a
+linking decision rather than a tidiness one.
 
-That matters because the difference is not small. `printf("Hello ug24\n")`
-is 300 bytes. The same program with a `%f` and a float to put through it is
-about 24 KB, once the formatter and the soft-float library behind `%e` are
-linked. On a 64 KB part that is worth not paying for by default.
+`ug24_printf_float.c` holds `%f`, and the `%f` half of `%g`, converted from
+the bit pattern by **integer arithmetic alone** — a float is exactly
+`mant × 2^(exp-23)`, so shifts recover the integer part and a 32-bit binary
+fraction, and multiplying that fraction by ten recovers its decimal digits.
+Nothing there calls into soft float, so `ug24_stdio.c` references it normally
+and it is linked with `printf` unconditionally. Its digits agree with a hosted
+`printf` at any precision.
 
-That rule on its own has a hole. A program whose floating-point arithmetic
-the optimiser folds away needs the formatter and pulls nothing in:
+`ug24_float.c` holds the arithmetic and `%e`, which genuinely needs it:
+finding the decimal exponent of an arbitrary float means dividing by ten until
+it is in range, and there is no integer shortcut across the whole exponent
+range. `%e` is reached through a **weak** symbol, so a program that does no
+floating-point arithmetic links neither it nor the library under it. Such a
+program printing `%e` gets `<fp?>`; printing `%f` gets its digits.
+
+The cost of that default, measured:
+
+| Program | Size |
+| :--- | ---: |
+| `printf("Hello ug24\n")` — optimised to `puts`, no formatter at all | 300 bytes |
+| `printf("%d\n", n)` | 14,936 bytes |
+| the same, opting out of the float formatter | 8,168 bytes |
+| `printf("%f\n", x)` | 14,952 bytes |
+
+**Opting out** needs no flag and no compiler support: define the symbol
+yourself and the archive member is never extracted.
+
+```c
+int __ug24_format_float(char *out, unsigned long bits, int precision, char conv)
+{ (void)bits; (void)precision; (void)conv; out[0] = '?'; return 1; }
+```
+
+### A rejected design, recorded because it was implemented first
+
+The case that forced this arrangement is a program whose floating-point
+arithmetic the optimiser folds away:
 
 ```c
 printf("%f\n", 879 * 9 / 50.0f + 52);   /* one constant by link time */
 ```
 
-`UG24AsmPrinter` closes it. A floating-point value passed in the variadic
-part of an argument list is the one thing that makes `%f` meaningful, and it
-is still visible in the IR when the object file is written, so any
-translation unit that does it emits an undefined *global* reference to
-`__ug24_format_float` — which is what `-Wl,-u` does, decided per translation
-unit instead of per link. The flag still works and is no longer needed.
+Nothing at link time distinguishes that from a program that never had a float
+in it, so the first fix put the decision in the **compiler**: `UG24AsmPrinter`
+noticed a floating-point value reaching a variadic call — still visible in the
+IR — and emitted an undefined reference to `__ug24_format_float`.
+
+It worked, it was precise, and it was wrong. It hardcoded a private symbol of
+one particular C library into the code generator, and made the compiler's
+output depend on how `printf` happens to be built. Libcalls such as
+`__mulhi3` are not a precedent: those exist because the *instruction set*
+cannot multiply, which is the code generator's business. How `printf` formats
+a float is not.
+
+It was removed. The backend contains no reference to any runtime symbol, and
+`ug24-tests/verify-against-isa-xlsx.py` checks the assembler against the
+vendor spreadsheet with the runtime and the simulator out of the loop.
 
 ### 3.9 Optional multiplier and divider
 `MUL` and `DIV` are optional blocks in the SoC configuration. They are present

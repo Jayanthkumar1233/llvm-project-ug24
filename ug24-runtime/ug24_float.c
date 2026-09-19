@@ -14,57 +14,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-typedef unsigned char u8;
-typedef unsigned short u16;
-typedef unsigned long u32;
-typedef signed long s32;
-typedef unsigned long long u64;
-typedef signed long long s64;
-
-#define EXP_BIAS   127
-#define EXP_MAX    255
-#define MANT_BITS  23
-#define MANT_MASK  0x007fffffUL
-#define HIDDEN_BIT 0x00800000UL
-
-typedef struct {
-  u8 sign;
-  short exp;    // unbiased; EXP_MAX - EXP_BIAS marks inf/NaN
-  u32 mant;     // with the hidden bit in place, i.e. 1.f scaled by 2^23
-  u8 is_zero;
-  u8 is_inf;
-  u8 is_nan;
-} Parts;
-
-static Parts unpack(u32 bits) {
-  Parts p;
-  unsigned raw = (unsigned)((bits >> MANT_BITS) & 0xff);
-
-  p.sign = (u8)((bits >> 31) & 1);
-  p.mant = bits & MANT_MASK;
-  p.is_zero = p.is_inf = p.is_nan = 0;
-
-  if (raw == 0) {
-    if (p.mant == 0) {
-      p.is_zero = 1;
-      p.exp = 0;
-    } else {
-      // Subnormal: no hidden bit, and the exponent is that of the smallest
-      // normal rather than zero.
-      p.exp = (short)(1 - EXP_BIAS);
-    }
-  } else if (raw == EXP_MAX) {
-    p.exp = (short)(EXP_MAX - EXP_BIAS);
-    if (p.mant)
-      p.is_nan = 1;
-    else
-      p.is_inf = 1;
-  } else {
-    p.exp = (short)((short)raw - EXP_BIAS);
-    p.mant |= HIDDEN_BIT;
-  }
-  return p;
-}
+#include "ug24_float_bits.h"
 
 // Assemble a value from a sign, an unbiased exponent and a mantissa that is
 // not yet normalised.  Handles overflow to infinity, gradual underflow and
@@ -413,292 +363,89 @@ s64 __fixsfdi(u32 bits) {
   return a.sign ? (s64)((u64)0 - magnitude) : (s64)magnitude;
 }
 
+
 //===----------------------------------------------------------------------===//
-// Decimal formatting for printf
+// The %e half of printf's decimal conversion
 //===----------------------------------------------------------------------===//
 //
-// This lives here, in the floating-point runtime, rather than in ug24_stdio.c,
-// so that a program which never touches a float does not pay for it.  The
-// formatter and the arithmetic it calls are one archive member: the linker
-// pulls it in exactly when the program already needs soft float, and printf's
-// weak stub covers the case where it does not.
+// This lives here rather than with the rest of the formatter because it is
+// the part that genuinely needs floating-point arithmetic: finding the
+// decimal exponent of an arbitrary float means dividing it by ten until it is
+// in range, and there is no integer shortcut for that across the whole
+// exponent range.  Keeping it here means a program that never does any
+// floating-point arithmetic links neither this nor the library under it, and
+// ug24_printf_float.c -- which does not need either -- can be linked with
+// printf unconditionally.
 //
-// The one program this gets wrong is one that prints a floating-point
-// *constant* and does no arithmetic at all, which needs no soft float and so
-// leaves the stub in place.  Link that with -Wl,-u,__ug24_format_float.
-//
-// Accuracy: the digits are produced by repeated multiplication and division
-// by ten in single precision, so the last of more than about seven
-// significant digits may be off by one.  A float carries no more than that.
+// Accuracy: the digits come from repeated multiplication and division by ten
+// in single precision, so beyond about seven significant digits the last one
+// may be off by one.  %f does not share that limitation; it is exact.
 
-#define FORMAT_MAX_PRECISION 17
-
-static int copy_literal(char *out, const char *text) {
-  int n = 0;
-  while (text[n]) {
-    out[n] = text[n];
-    n++;
-  }
-  return n;
-}
-
-// Digits of \p value, most significant first, by repeated subtraction rather
-// than by division.
-//
-// "value % 10" and "value /= 10" on a 64-bit value are two calls into
-// __udivdi3, which is restoring division -- 64 iterations over four limbs,
-// about 32,000 instructions each.  Eight digits of an integer part cost half
-// a million instructions that way, and printing a handful of floats ran the
-// simulator past its instruction limit.  Subtraction is at most nine steps
-// per digit, and 64-bit compare and subtract are expanded inline by the
-// backend, so this needs no helper at all -- which also keeps the 64-bit
-// division out of any program that only prints floats.
-static const u64 kPowersOfTen[] = {
-  10000000000000000000ULL, 1000000000000000000ULL, 100000000000000000ULL,
-  10000000000000000ULL,    1000000000000000ULL,    100000000000000ULL,
-  10000000000000ULL,       1000000000000ULL,       100000000000ULL,
-  10000000000ULL,          1000000000ULL,          100000000ULL,
-  10000000ULL,             1000000ULL,             100000ULL,
-  10000ULL,                1000ULL,                100ULL,
-  10ULL,                   1ULL,
-};
-
-static int format_u64(char *out, u64 value) {
-  int len = 0;
-  unsigned i;
-  int leading = 1;
-
-  for (i = 0; i < sizeof kPowersOfTen / sizeof kPowersOfTen[0]; i++) {
-    u64 power = kPowersOfTen[i];
-    u8 digit = 0;
-
-    while (value >= power) {
-      value -= power;
-      digit++;
-    }
-    if (digit)
-      leading = 0;
-    if (!leading)
-      out[len++] = (char)('0' + digit);
-  }
-
-  if (len == 0)
-    out[len++] = '0';          // the value was zero
-  return len;
-}
-
-// %g prints no trailing zeros in its fraction, and no trailing point once
-// they are gone.  Called while \p len still ends at the last digit: for %e
-// that is before the exponent marker has been appended.
-static int trim_zeros(char *out, int len) {
-  int end = len, i;
-  int has_point = 0;
-
-  for (i = 0; i < end; i++)
-    if (out[i] == '.')
-      has_point = 1;
-  if (!has_point)
-    return len;
-
-  while (end > 0 && out[end - 1] == '0')
-    end--;
-  if (end > 0 && out[end - 1] == '.')
-    end--;
-  return end;
-}
-
-// Multiply a binary fraction -- a value scaled by 2^32, so 0.5 is
-// 0x80000000 -- by ten, returning the decimal digit that carried out of the
-// top.  Done on 16-bit halves so that nothing here needs a 64-bit
-// intermediate, and exactly, so the digits it produces are the digits of the
-// float rather than of an approximation to it.
-static u8 mul10(u32 *fraction) {
-  u32 value = *fraction;
-  u32 low = (value & 0xffffUL) * 10;
-  u32 high = (value >> 16) * 10 + (low >> 16);
-
-  *fraction = ((high & 0xffffUL) << 16) | (low & 0xffffUL);
-  return (u8)(high >> 16);
-}
-
-static float power_of_ten(int exponent) {
+static float power_of_ten_e(int exponent) {
   float result = 1.0f;
   while (exponent-- > 0)
     result *= 10.0f;
   return result;
 }
 
-/// Format the IEEE single in \p bits into \p out, which must have room for 48
-/// characters.  \p conv is one of f F e E g G; \p precision is -1 for the
-/// default.  Returns the number of characters written.
-int __ug24_format_float(char *out, u32 bits, int precision, char conv) {
+/// Format the magnitude of \p bits as d.ddde+XX.  The caller has already
+/// written any minus sign.  \p strip_zeros is set when this is a %g that
+/// chose exponential style.
+int __ug24_format_float_exp(char *out, u32 bits, int precision, int upper,
+                            int strip_zeros) {
   union { u32 u; float f; } cvt;
-  float value, scaled;
-  int len = 0, negative, exponent = 0, i;
-  char lower = (char)(conv | 0x20);
-  int strip_zeros = 0;
+  float scaled;
+  int len = 0, exponent = 0, i, digit;
 
   cvt.u = bits;
-  value = cvt.f;
-  negative = (int)((bits >> 31) & 1);
+  scaled = cvt.f;
 
-  {
-    Parts p = unpack(bits);
-    if (p.is_nan)
-      return copy_literal(out, (conv & 0x20) ? "nan" : "NAN");
-    if (p.is_inf) {
-      if (negative)
-        out[len++] = '-';
-      return len + copy_literal(out + len, (conv & 0x20) ? "inf" : "INF");
-    }
-  }
-
-  if (precision < 0)
-    precision = 6;
-  if (precision > FORMAT_MAX_PRECISION)
-    precision = FORMAT_MAX_PRECISION;
-
-  scaled = negative ? -value : value;
-
-  // Find the decimal exponent, which %e needs outright and %g needs in order
-  // to choose a style.  Only those two: this loop is the one place the
-  // formatter divides floats, and %f is much the most common conversion, so
-  // it is worth keeping it off this path.
-  if (lower != 'f' && scaled != 0.0f) {
+  if (scaled != 0.0f) {
     while (scaled >= 10.0f) { scaled /= 10.0f; exponent++; }
     while (scaled < 1.0f)   { scaled *= 10.0f; exponent--; }
   }
 
-  if (lower == 'g') {
-    // C's rule: %e when the exponent is below -4 or not less than the
-    // precision, %f otherwise.  A precision of 0 is treated as 1.
-    if (precision == 0)
-      precision = 1;
-    if (exponent < -4 || exponent >= precision) {
-      lower = 'e';
-      precision--;                 // %e counts digits after the point
-    } else {
-      lower = 'f';
-      precision -= exponent + 1;
-      if (precision < 0)
-        precision = 0;
+  // Round at the last digit that will be printed.
+  scaled += 0.5f / power_of_ten_e(precision);
+  if (scaled >= 10.0f) { scaled /= 10.0f; exponent++; }
+
+  digit = (int)scaled;
+  out[len++] = (char)('0' + digit);
+  scaled -= (float)digit;
+
+  if (precision > 0) {
+    out[len++] = '.';
+    for (i = 0; i < precision; i++) {
+      scaled *= 10.0f;
+      digit = (int)scaled;
+      if (digit > 9) digit = 9;
+      if (digit < 0) digit = 0;
+      out[len++] = (char)('0' + digit);
+      scaled -= (float)digit;
     }
-    strip_zeros = 1;               // %g prints no trailing zeros
   }
 
-  if (negative)
-    out[len++] = '-';
-
-  if (lower == 'e') {
-    int digit;
-
-    // Round at the last digit that will be printed.
-    scaled += 0.5f / power_of_ten(precision);
-    if (scaled >= 10.0f) { scaled /= 10.0f; exponent++; }
-
-    digit = (int)scaled;
-    out[len++] = (char)('0' + digit);
-    scaled -= (float)digit;
-
-    if (precision > 0) {
-      out[len++] = '.';
-      for (i = 0; i < precision; i++) {
-        scaled *= 10.0f;
-        digit = (int)scaled;
-        if (digit > 9) digit = 9;
-        out[len++] = (char)('0' + digit);
-        scaled -= (float)digit;
-      }
-    }
-
-    if (strip_zeros)
-      len = trim_zeros(out, len);
-
-    out[len++] = (conv & 0x20) ? 'e' : 'E';
-    out[len++] = exponent < 0 ? '-' : '+';
-    {
-      int magnitude = exponent < 0 ? -exponent : exponent;
-      if (magnitude < 10)
-        out[len++] = '0';
-      len += format_u64(out + len, (u64)(u32)magnitude);
-    }
-    return len;
+  if (strip_zeros) {
+    while (len > 0 && out[len - 1] == '0')
+      len--;
+    if (len > 0 && out[len - 1] == '.')
+      len--;
   }
 
-  // %f, from the mantissa and the exponent rather than from float
-  // arithmetic.
-  //
-  // A float is exactly mant x 2^(exp-23).  Splitting that at the binary point
-  // gives an integer part and a binary fraction, and the fraction fits in 32
-  // bits for every value with digits worth printing -- so shifts recover it
-  // exactly, and multiplying it by ten recovers its decimal digits exactly
-  // too.  The earlier version did this by repeatedly multiplying the float by
-  // ten, which accumulated its own error: 1144.22f came out as 1144.219970
-  // where the value rounds to 1144.219971.
+  out[len++] = upper ? 'E' : 'e';
+  out[len++] = exponent < 0 ? '-' : '+';
   {
-    Parts p = unpack(bits);
-    int shift = p.exp - MANT_BITS;   // value = p.mant * 2^shift
-    u64 integer_part = 0;
-    u32 fraction = 0;                // the fraction below the point, x 2^32
-    char digits[FORMAT_MAX_PRECISION];
-    int last_parity;
-
-    // A 24-bit mantissa shifted left by more than 40 no longer fits a 64-bit
-    // integer part.  A float that large has no digits left to lose anyway,
-    // so it goes out in %e style.
-    if (!p.is_zero && shift > 40)
-      return len + __ug24_format_float(out + len, bits & 0x7fffffffUL,
-                                       precision, (conv & 0x20) ? 'e' : 'E');
-
-    if (p.is_zero) {
-      // nothing to split
-    } else if (shift >= 0) {
-      integer_part = (u64)p.mant << shift;
-    } else {
-      unsigned r = (unsigned)(-shift);
-
-      integer_part = r < 24 ? (u64)(p.mant >> r) : 0;
-
-      // The fraction is the low r bits of the mantissa, scaled so that its
-      // most significant bit lands in bit 31.  Each branch avoids a shift by
-      // 32 or more, which is undefined.
-      if (r < 32)
-        fraction = (p.mant & (((u32)1 << r) - 1)) << (32 - r);
-      else if (r == 32)
-        fraction = p.mant;
-      else if (r < 56)
-        fraction = p.mant >> (r - 32);
-      // Beyond that the whole value is under 2^-33 and every printed digit
-      // is zero.
+    int magnitude = exponent < 0 ? -exponent : exponent;
+    if (magnitude < 10)
+      out[len++] = '0';
+    if (magnitude >= 100) {
+      out[len++] = (char)('0' + magnitude / 100);
+      magnitude %= 100;
+      out[len++] = (char)('0' + magnitude / 10);
+    } else if (magnitude >= 10) {
+      out[len++] = (char)('0' + magnitude / 10);
     }
-
-    for (i = 0; i < precision; i++)
-      digits[i] = (char)('0' + mul10(&fraction));
-
-    // Round to nearest, ties to even -- the rule the arithmetic uses, and the
-    // rule a hosted printf uses, so the two agree digit for digit.
-    last_parity = precision > 0 ? (digits[precision - 1] - '0')
-                                : (int)(integer_part & 1);
-    if (fraction > 0x80000000UL ||
-        (fraction == 0x80000000UL && (last_parity & 1))) {
-      for (i = precision - 1; i >= 0; i--) {
-        if (digits[i] != '9') { digits[i]++; break; }
-        digits[i] = '0';
-      }
-      if (i < 0)
-        integer_part++;            // the carry ran off the top of the fraction
-    }
-
-    len += format_u64(out + len, integer_part);
-
-    if (precision > 0) {
-      out[len++] = '.';
-      for (i = 0; i < precision; i++)
-        out[len++] = digits[i];
-    }
+    out[len++] = (char)('0' + magnitude % 10);
   }
-
-  if (strip_zeros)
-    len = trim_zeros(out, len);
   return len;
 }
