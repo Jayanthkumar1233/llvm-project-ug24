@@ -44,10 +44,17 @@ done
 "$BIN/llvm-mc" -triple=ug24-unknown-none-eabi -filetype=obj \
     "$ROOT/ug24-runtime/ug24_setjmp.s" -o "$TMP/ug24_setjmp.o"
 
+# Weak absolute definitions of the peripheral map, for a program linked with
+# its own script instead of ug24.ld.  The stock script's assignments override
+# them, so with it this member is never extracted.
+"$BIN/llvm-mc" -triple=ug24-unknown-none-eabi -filetype=obj \
+    "$ROOT/ug24-runtime/ug24_platform.s" -o "$TMP/ug24_platform.o"
+
 "$BIN/llvm-ar" rcs "$OUT/libug24.a" "$TMP/ug24_builtins.o" \
     "$TMP/ug24_int64.o" "$TMP/ug24_float.o" "$TMP/ug24_printf_float.o" \
     "$TMP/ug24_io.o" \
-    "$TMP/ug24_stdio.o" "$TMP/ug24_stdlib.o" "$TMP/ug24_setjmp.o"
+    "$TMP/ug24_stdio.o" "$TMP/ug24_stdlib.o" "$TMP/ug24_setjmp.o" \
+    "$TMP/ug24_platform.o"
 
 "$BIN/llvm-mc" -triple=ug24-unknown-none-eabi -filetype=obj \
     "$ROOT/ug24-runtime/crt0.s" -o "$OUT/crt0.o"

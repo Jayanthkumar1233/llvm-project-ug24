@@ -73,7 +73,14 @@ image's symbol table**, and each one is an offset from the linker script's
 | `__ug24_timer_load` | `0xFF13` |
 
 A loader that reads these needs no agreement with whoever built the image, and
-keeps working when an SoC decodes its peripherals somewhere else. `ug24.h`
+keeps working when an SoC decodes its peripherals somewhere else.
+
+`ug24_platform.s` in the runtime carries the same addresses as **weak** absolute
+definitions, for a program linked with its own script (`-T`) rather than
+`ug24.ld`. A linker-script assignment overrides them, so with the stock script
+they are never used and the archive member is not even extracted. A custom
+script that moves the `MMIO` window should copy the assignment block out of
+`ug24.ld`; leaving it out means silently falling back to `0xFF00`. `ug24.h`
 resolves `UG24_UART_TX` to the same symbols, so the runtime moves with the
 script too — changing the two `ORIGIN` lines in `ug24-runtime/ug24.ld` from
 `0xFF00` to `0xFE00` relocates the console, the runtime and the simulator
