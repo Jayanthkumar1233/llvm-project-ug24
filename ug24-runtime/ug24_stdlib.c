@@ -9,11 +9,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <stdlib.h>
+#include <ug24.h>
 
 typedef unsigned char u8;
 typedef unsigned short u16;
 
-#define SIM_EXIT (*(volatile unsigned char *)0xFF02)
+#define SIM_EXIT UG24_SIM_EXIT   // from the linker script, via <ug24.h>
 
 extern char __heap_start;
 extern char __heap_end;

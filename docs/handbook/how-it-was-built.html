@@ -1354,6 +1354,22 @@ mvi  r15, hi8(message)   <span class="p">; high byte → R_UG24_HI8</span></pre>
         </p>
 
         <p>
+          Those addresses are the one thing in this project that the
+          specification and the spreadsheet do <em>not</em> determine, because
+          the core contains no UART: whichever chip wraps the core decides where
+          a console is decoded. A second simulator written from the same two
+          documents therefore cannot find the console, and has to be told. So
+          the linker script publishes the answer in every program it builds, as
+          symbols named <code>__ug24_uart_tx</code>,
+          <code>__ug24_sim_exit</code> and so on, and the simulator reads them
+          out of the file rather than assuming them &mdash; which also means
+          moving the peripheral page in the linker script moves the runtime and
+          the simulator with it. The full contract, for anyone writing their own
+          simulator or board support, is in
+          <code>docs/uG24-platform.md</code>.
+        </p>
+
+        <p>
           <strong>A stack-window check.</strong> The simulator reads the heap
           and stack boundaries out of the program's own symbol table and checks
           the stack pointer after every single instruction. On real hardware, a

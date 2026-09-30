@@ -1,8 +1,15 @@
 //===-- ug24.h - Minimal runtime interface for the uG24 -------------------===//
 //
 // There is no operating system on this target, so output goes to a
-// memory-mapped UART.  The addresses below must agree with the MMIO window in
-// ug24-runtime/ug24.ld and with ug24-sim/ug24sim.c.
+// memory-mapped UART.
+//
+// Every register below is a symbol the linker script defines, not a literal
+// address: ug24-runtime/ug24.ld owns the peripheral map, publishes it in the
+// ELF symbol table, and this header, the simulator and any other loader all
+// read it from there.  Point the script's MMIO region at a different page and
+// the runtime follows, with no source change and nothing to agree out of band.
+// The reasoning, and what a third-party simulator has to do to honour it, are
+// in docs/uG24-platform.md.
 //
 //===----------------------------------------------------------------------===//
 
@@ -18,9 +25,13 @@ typedef signed short   ug24_s16;
 // Peripheral registers
 //===----------------------------------------------------------------------===//
 
-#define UG24_UART_TX     (*(volatile unsigned char *)0xFF00)
-#define UG24_UART_STATUS (*(volatile unsigned char *)0xFF01)
-#define UG24_SIM_EXIT    (*(volatile unsigned char *)0xFF02)
+extern volatile unsigned char __ug24_uart_tx;
+extern volatile unsigned char __ug24_uart_status;
+extern volatile unsigned char __ug24_sim_exit;
+
+#define UG24_UART_TX     __ug24_uart_tx
+#define UG24_UART_STATUS __ug24_uart_status
+#define UG24_SIM_EXIT    __ug24_sim_exit
 
 /// Set when the transmitter can accept another byte.
 #define UG24_UART_READY  0x01
@@ -45,10 +56,15 @@ typedef signed short   ug24_s16;
 // replaces the default handler.  The attribute is what makes the function
 // preserve every register it touches and return through PSW and PC.
 
-#define UG24_IRQ_STATUS  (*(volatile unsigned char *)0xFF10)
-#define UG24_IRQ_ENABLE  (*(volatile unsigned char *)0xFF11)
-#define UG24_IRQ_RAISE   (*(volatile unsigned char *)0xFF12)
-#define UG24_TIMER_LOAD  (*(volatile unsigned char *)0xFF13)
+extern volatile unsigned char __ug24_irq_status;
+extern volatile unsigned char __ug24_irq_enable;
+extern volatile unsigned char __ug24_irq_raise;
+extern volatile unsigned char __ug24_timer_load;
+
+#define UG24_IRQ_STATUS  __ug24_irq_status
+#define UG24_IRQ_ENABLE  __ug24_irq_enable
+#define UG24_IRQ_RAISE   __ug24_irq_raise
+#define UG24_TIMER_LOAD  __ug24_timer_load
 
 /// Interrupt sources, as bits in UG24_IRQ_STATUS and UG24_IRQ_ENABLE.
 #define UG24_IRQ_TIMER   0x01

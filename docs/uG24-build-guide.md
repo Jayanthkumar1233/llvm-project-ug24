@@ -162,6 +162,7 @@ Useful options:
 | `--dump` | Write the whole 64 KB memory to `ug24-memory.bin` on exit |
 | `--max N` | Stop after N instructions instead of the 20,000,000 default |
 | `--quiet` | Print only what the program itself wrote |
+| `--io-map` | Print the peripheral map bound for this image, and where it came from |
 
 The exit status is what the program returned, except for three diagnostics:
 
@@ -179,6 +180,22 @@ The simulator also models an interrupt controller: a timer, a software
 source, and the `PSW` enable bits. Everything about it is an assumption; see
 "Interrupts" in [uG24-assumptions.md](uG24-assumptions.md) for what is
 assumed and why.
+
+`ug24sim` does not assume where the console is. It reads the peripheral map
+out of the image's symbol table — `__ug24_uart_tx` and its siblings, which
+`ug24-runtime/ug24.ld` derives from the `MMIO` region — and falls back to
+built-in defaults only for an image that publishes none, such as a stripped
+one. `--io-map` says which happened, and is the first thing to run when a
+program executes but prints nothing:
+
+```bash
+ug24-sim/ug24sim hello.elf --quiet --io-map
+```
+
+Anyone running these ELF files under a *different* simulator needs the same
+information; [uG24-platform.md](uG24-platform.md) is the contract to hand
+them, with the symbol names, a thirty-line loader, and everything else about
+the platform that the ISA documents do not cover.
 
 To look at a global after the run, find its address and read the dump:
 

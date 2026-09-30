@@ -4,23 +4,25 @@
 // relatives, over the memory-mapped UART.  There is no operating system and no
 // file system, so every stream is the console.
 //
-// Deliberately absent: floating point (%f, %e, %g), because the target has no
-// FPU and no soft-float library, and long long (%lld), because 64-bit
-// arithmetic would cost more than it is worth on an 8-bit ALU.  Both are
-// reported as unsupported rather than silently printing nonsense.
+// Floating point (%f, %e, %g) and long long (%lld) are supported: the target
+// has no FPU, so both go through the soft-float and 64-bit helpers in
+// ug24_float.c, ug24_printf_float.c and ug24_int64.c.
 //
 //===----------------------------------------------------------------------===//
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <ug24.h>
 
 typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned long u32;
 
-#define UART_TX     (*(volatile unsigned char *)0xFF00)
-#define UART_STATUS (*(volatile unsigned char *)0xFF01)
-#define UART_READY  0x01
+// The console comes from the linker script by way of <ug24.h>; see
+// docs/uG24-platform.md for why it is a symbol rather than an address.
+#define UART_TX     UG24_UART_TX
+#define UART_STATUS UG24_UART_STATUS
+#define UART_READY  UG24_UART_READY
 
 //===----------------------------------------------------------------------===//
 // Floating-point conversion

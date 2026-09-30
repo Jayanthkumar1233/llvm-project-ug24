@@ -15,6 +15,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdarg.h>
+#include <stddef.h>
 
 #define MEM_SIZE 0x10000
 
@@ -45,8 +46,36 @@
 #define VECTOR_IRQ   0x0008u
 #define VECTOR_SWI   0x000Cu
 
+// The reserved window, not just the registers that are modelled inside it:
+// ug24.ld keeps the whole top page out of the MEM region, so no program object
+// is ever placed there and swallowing a stray access is right.
 #define MMIO_BASE   0xFF00u
-#define MMIO_END    0xFF1Fu
+#define MMIO_END    0xFFFFu
+
+// Where the peripherals actually are, for this image.  The constants above are
+// only a fallback: the uG24 core has no peripherals of its own, so nothing in
+// the ISA specification or the encoding spreadsheet says where a console is
+// decoded, and a simulator that hard-codes 0xFF00 is guessing.  load_elf()
+// replaces every field below with the value of the matching __ug24_* absolute
+// symbol when the image publishes one, which is the contract in
+// docs/uG24-platform.md.  An image that moves its MMIO window therefore moves
+// this simulator's peripherals with it, and no address has to be agreed out
+// of band.
+typedef struct {
+    uint16_t base, end;
+    uint16_t uart_tx, uart_status, sim_exit;
+    uint16_t irq_status, irq_enable, irq_raise, timer_load;
+    int      from_elf;        // non-zero once a symbol has been honoured
+} Periph;
+
+static void periph_defaults(Periph *p) {
+    p->base        = MMIO_BASE;   p->end         = MMIO_END;
+    p->uart_tx     = UART_TX;     p->uart_status = UART_STATUS;
+    p->sim_exit    = SIM_EXIT;
+    p->irq_status  = IRQ_STATUS;  p->irq_enable  = IRQ_ENABLE;
+    p->irq_raise   = IRQ_RAISE;   p->timer_load  = TIMER_LOAD;
+    p->from_elf    = 0;
+}
 
 // PSW bit positions, from the uG24 register spreadsheet.
 enum {
@@ -83,6 +112,9 @@ typedef struct {
     uint16_t stack_low, stack_high;
     int      stack_checked;
 
+    // The peripheral map for the loaded image, from its symbol table.
+    Periph   io;
+
     // Interrupt controller state.
     uint8_t  irq_pending;
     uint8_t  irq_enable;
@@ -95,45 +127,34 @@ typedef struct {
 // differently from plain memory.  Instruction fetch does not: code cannot be
 // executed out of the MMIO region.
 static uint8_t mem_read(Core *c, uint16_t addr) {
-    if (addr >= MMIO_BASE && addr <= MMIO_END) {
-        switch (addr) {
-        case UART_STATUS: return 1;   // always ready to accept a byte
-        case IRQ_STATUS:  return c->irq_pending;
-        case IRQ_ENABLE:  return c->irq_enable;
-        case TIMER_LOAD:  return c->timer_load;
-        default:          return 0;
-        }
+    if (addr >= c->io.base && addr <= c->io.end) {
+        if (addr == c->io.uart_status) return 1;  // always ready for a byte
+        if (addr == c->io.irq_status)  return c->irq_pending;
+        if (addr == c->io.irq_enable)  return c->irq_enable;
+        if (addr == c->io.timer_load)  return c->timer_load;
+        return 0;
     }
     return c->mem[addr];
 }
 
 static void mem_write(Core *c, uint16_t addr, uint8_t value) {
-    if (addr >= MMIO_BASE && addr <= MMIO_END) {
-        switch (addr) {
-        case UART_TX:
+    if (addr >= c->io.base && addr <= c->io.end) {
+        if (addr == c->io.uart_tx) {
             fputc(value, stdout);
             fflush(stdout);
-            break;
-        case SIM_EXIT:
+        } else if (addr == c->io.sim_exit) {
             c->exit_code = value;
             c->halted = 1;
-            break;
-        case IRQ_STATUS:
+        } else if (addr == c->io.irq_status) {
             // Write-one-to-clear, which is what a handler does on the way out.
             c->irq_pending &= (uint8_t)~value;
-            break;
-        case IRQ_ENABLE:
+        } else if (addr == c->io.irq_enable) {
             c->irq_enable = value;
-            break;
-        case IRQ_RAISE:
+        } else if (addr == c->io.irq_raise) {
             c->irq_pending |= (uint8_t)(1u << (value & 7));
-            break;
-        case TIMER_LOAD:
+        } else if (addr == c->io.timer_load) {
             c->timer_load = value;
             c->timer_count = value;
-            break;
-        default:
-            break;
         }
         return;
     }
@@ -189,6 +210,28 @@ static uint16_t data_base(Core *c) {
 
 #define EM_UG24 0x9240
 
+// One symbol from the image's symbol table, against the peripheral map.  The
+// names are the linker-script assignments in ug24-runtime/ug24.ld.
+static void bind_periph(Periph *p, const char *name, uint16_t value) {
+    static const struct { const char *name; size_t offset; } kMap[] = {
+        { "__mmio_base",        offsetof(Periph, base)        },
+        { "__mmio_end",         offsetof(Periph, end)         },
+        { "__ug24_uart_tx",     offsetof(Periph, uart_tx)     },
+        { "__ug24_uart_status", offsetof(Periph, uart_status) },
+        { "__ug24_sim_exit",    offsetof(Periph, sim_exit)    },
+        { "__ug24_irq_status",  offsetof(Periph, irq_status)  },
+        { "__ug24_irq_enable",  offsetof(Periph, irq_enable)  },
+        { "__ug24_irq_raise",   offsetof(Periph, irq_raise)   },
+        { "__ug24_timer_load",  offsetof(Periph, timer_load)  },
+    };
+    for (size_t i = 0; i < sizeof kMap / sizeof kMap[0]; i++) {
+        if (strcmp(name, kMap[i].name) != 0) continue;
+        *(uint16_t *)((char *)p + kMap[i].offset) = value;
+        p->from_elf = 1;
+        return;
+    }
+}
+
 static int load_elf(Core *c, const char *path, uint16_t *entry) {
     FILE *f = fopen(path, "rb");
     if (!f) { perror(path); return -1; }
@@ -237,7 +280,12 @@ static int load_elf(Core *c, const char *path, uint16_t *entry) {
         memset(c->mem + p_paddr + p_filesz, 0, p_memsz - p_filesz);
     }
 
-    // Find __heap_end and __stack_top so that the stack can be bounds-checked.
+    // Read the stack window and the peripheral map out of the symbol table.
+    // __heap_end and __stack_top give the bounds check something to check; the
+    // __ug24_* symbols say where this image expects its console and its
+    // interrupt controller to be, so that nothing here has to assume 0xFF00.
+    // Every one of them is optional: an image that publishes none still runs
+    // against the defaults.
     uint32_t e_shoff = hdr[32] | (hdr[33]<<8) | (hdr[34]<<16) | ((uint32_t)hdr[35]<<24);
     unsigned e_shentsize = hdr[46] | (hdr[47] << 8);
     unsigned e_shnum     = hdr[48] | (hdr[49] << 8);
@@ -270,6 +318,7 @@ static int load_elf(Core *c, const char *path, uint16_t *entry) {
             buf[got] = '\0';
             if (!strcmp(buf, "__heap_end"))  { c->stack_low  = (uint16_t)val; }
             else if (!strcmp(buf, "__stack_top")) { c->stack_high = (uint16_t)val; }
+            else bind_periph(&c->io, buf, (uint16_t)val);
         }
         break;
     }
@@ -733,41 +782,61 @@ static void step(Core *c) {
 int main(int argc, char **argv) {
     const char *path = NULL;
     uint64_t max_steps = 20000000;
-    int trace_on = 0, dump = 0, quiet = 0;
+    int trace_on = 0, dump = 0, quiet = 0, show_io = 0;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--trace")) trace_on = 1;
         else if (!strcmp(argv[i], "--dump")) dump = 1;
         else if (!strcmp(argv[i], "--quiet")) quiet = 1;
+        else if (!strcmp(argv[i], "--io-map")) show_io = 1;
         else if (!strcmp(argv[i], "--max") && i + 1 < argc)
             max_steps = strtoull(argv[++i], NULL, 0);
         else if (argv[i][0] == '-') {
             fprintf(stderr,
                     "usage: %s program.elf [--trace] [--dump] [--quiet] "
-                    "[--max N]\n", argv[0]);
+                    "[--io-map] [--max N]\n", argv[0]);
             return 2;
         } else path = argv[i];
     }
     if (!path) {
         fprintf(stderr,
                 "usage: %s program.elf [--trace] [--dump] [--quiet] "
-                "[--max N]\n", argv[0]);
+                "[--io-map] [--max N]\n", argv[0]);
         return 2;
     }
 
     Core *c = calloc(1, sizeof *c);
     if (!c) { perror("calloc"); return 1; }
     c->trace = trace_on;
+    periph_defaults(&c->io);
 
     uint16_t entry = 0;
     if (load_elf(c, path, &entry) != 0) { free(c); return 1; }
+
+    // --io-map answers "where does this image think its console is?", which is
+    // the question to ask first when a program runs but prints nothing.
+    if (show_io) {
+        fprintf(stderr, "peripheral map (%s):\n",
+                c->io.from_elf ? "from the ELF symbol table"
+                               : "built-in defaults, image published none");
+        fprintf(stderr, "  window      %04x-%04x\n", c->io.base, c->io.end);
+        fprintf(stderr, "  uart_tx     %04x\n", c->io.uart_tx);
+        fprintf(stderr, "  uart_status %04x\n", c->io.uart_status);
+        fprintf(stderr, "  sim_exit    %04x\n", c->io.sim_exit);
+        fprintf(stderr, "  irq_status  %04x\n", c->io.irq_status);
+        fprintf(stderr, "  irq_enable  %04x\n", c->io.irq_enable);
+        fprintf(stderr, "  irq_raise   %04x\n", c->io.irq_raise);
+        fprintf(stderr, "  timer_load  %04x\n", c->io.timer_load);
+    }
     c->pc = entry;
     // A real uG24 takes its reset SP from the strapped i_reset_sp pin.  The
     // closest thing available here is __stack_top from the image, which is
-    // what crt0 loads anyway; 0xfffe is the fallback when the symbol is
-    // missing.  Seeding it this way also keeps the bounds check below from
-    // firing on the instructions before crt0 has set SP.
-    c->sp = c->stack_high ? c->stack_high : 0xfffe;
+    // what crt0 loads anyway.  The fallback for an image without that symbol
+    // is the word below the peripheral window, because the top of memory is
+    // inside it and pushes there would be swallowed rather than stored.
+    // Seeding it this way also keeps the bounds check below from firing on the
+    // instructions before crt0 has set SP.
+    c->sp = c->stack_high ? c->stack_high : (uint16_t)(c->io.base - 2);
 
     while (!c->halted && c->cycles < max_steps) {
         step(c);

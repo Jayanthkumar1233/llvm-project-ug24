@@ -227,9 +227,16 @@ The cost of that default, measured:
 | Program | Size |
 | :--- | ---: |
 | `printf("Hello ug24\n")` — optimised to `puts`, no formatter at all | 300 bytes |
-| `printf("%d\n", n)` | 14,936 bytes |
-| the same, opting out of the float formatter | 8,168 bytes |
-| `printf("%f\n", x)` | 14,952 bytes |
+| `printf("%d\n", n)` | 14,944 bytes |
+| the same, opting out of the float formatter | 8,172 bytes |
+| `printf("%f\n", x)` | 14,960 bytes |
+
+Measured with `llvm-size` at `-Os`. Each figure is four to eight bytes above
+what the same program cost while the peripheral addresses were literals rather
+than symbols the linker script defines (§5 of this document): `lo8`/`hi8` of a
+relocation assembles to the same two `MVI`s as `lo8`/`hi8` of a constant, so
+the cost is not per access. The symbols add about 270 bytes of symbol table,
+which is neither loaded nor executed.
 
 **Opting out** needs no flag and no compiler support: define the symbol
 yourself and the archive member is never extracted.
@@ -365,3 +372,19 @@ instruction/data TCM sizes are per-SoC parameters. `ug24-runtime/ug24.ld`
 therefore lays out one flat 64 KB image — text from address 0, then rodata,
 data and bss, with the stack growing down from `0xFFFE`. Adjust the `MEMORY`
 block to match the part being targeted.
+
+### The peripheral page is not derivable from the source documents
+
+The top page, `0xFF00-0xFFFF`, is held out of the linker's `MEM` region for
+memory-mapped peripherals. Which byte in it is the console is a *platform*
+decision: the core has none, so neither the specification nor the spreadsheet
+says, and an independently written simulator cannot derive it. Query G5 asks
+for the real map.
+
+Rather than leaving that to be agreed out of band, the linker script publishes
+the map as absolute symbols in every image — `__ug24_uart_tx`,
+`__ug24_sim_exit` and the rest — and `ug24.h`, the runtime and `ug24sim` all
+read it from there instead of from a literal. Moving the `MMIO` region moves
+all of them together. The contract, and a loader that honours it, are in
+[uG24-platform.md](uG24-platform.md); that document is also the one to hand to
+anyone writing a second simulator.

@@ -2,7 +2,7 @@
 //
 // A freestanding stdio.  There is no operating system and no file system on
 // this target, so there are no files: every stream is the memory-mapped UART
-// that ug24.ld reserves at 0xFF00.
+// that ug24.ld reserves at the top of memory; <ug24.h> names the registers.
 //
 // Supported conversions:
 //     %d %i %u %x %X %o %c %s %p %%

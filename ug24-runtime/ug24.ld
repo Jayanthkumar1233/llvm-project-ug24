@@ -76,7 +76,27 @@ SECTIONS
   __stack_top = ORIGIN(MEM) + LENGTH(MEM) - 2;
   __heap_end  = __stack_top - __stack_size;
 
+  /* The peripheral map, published in the symbol table so that a loader or a
+   * simulator never has to guess where the console is.  The uG24 core has no
+   * peripherals of its own: neither the ISA specification nor the encoding
+   * spreadsheet says where a UART is decoded, so an independently written
+   * simulator cannot derive these addresses from those documents.  Reading
+   * them out of the ELF turns that guess into a fact -- and keeps working
+   * when an SoC decodes the page somewhere other than 0xFF00, because
+   * everything below is an offset from the MMIO region.
+   *
+   * See docs/uG24-platform.md for the contract and a loader that reads it. */
   __mmio_base = ORIGIN(MMIO);
+  __mmio_end  = ORIGIN(MMIO) + LENGTH(MMIO) - 1;
+
+  __ug24_uart_tx     = ORIGIN(MMIO) + 0x00;
+  __ug24_uart_status = ORIGIN(MMIO) + 0x01;
+  __ug24_sim_exit    = ORIGIN(MMIO) + 0x02;
+
+  __ug24_irq_status  = ORIGIN(MMIO) + 0x10;
+  __ug24_irq_enable  = ORIGIN(MMIO) + 0x11;
+  __ug24_irq_raise   = ORIGIN(MMIO) + 0x12;
+  __ug24_timer_load  = ORIGIN(MMIO) + 0x13;
 
   /DISCARD/ : { *(.comment) *(.note.*) *(.eh_frame) }
 }
