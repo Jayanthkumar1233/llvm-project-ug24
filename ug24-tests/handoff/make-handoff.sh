@@ -66,6 +66,7 @@ cp "$ROOT/docs/uG24-platform.md" "$OUT/"
     for SRC in "$DIR"/src/*.c; do
         NAME=$(basename "$SRC" .c)
         LINES=$(wc -l < "$OUT/$NAME.expected" | tr -d ' ')
+        if [ "$LINES" = 1 ]; then UNIT=line; else UNIT=lines; fi
         COUNT=$(sed 's/instructions: //; s/ instructions//' "$OUT/$NAME.count")
         case $NAME in
         01_hello)    WHAT='the console and the halt, nothing else' ;;
@@ -73,9 +74,14 @@ cp "$ROOT/docs/uG24-platform.md" "$OUT/"
         03_control)  WHAT='branches both ways, calls, recursion, function pointers' ;;
         04_memory)   WHAT='.data copied to its run address, .bss zeroed, the heap' ;;
         05_float)    WHAT='soft float end to end, the heaviest program here' ;;
-        *)           WHAT='' ;;
+        # A program dropped into src/ after the fact: describe it from the
+        # first line of its leading comment when it has one, so the table stays
+        # readable without this script having to know about it.
+        *)           WHAT=$(sed -n 's|^/\* *[0-9A-Za-z_]* *- *||p' "$SRC" | head -1)
+                     [ -n "$WHAT" ] || WHAT='added to the kit locally' ;;
         esac
-        printf '| `%s` | %s lines | %s | %s |\n' "$NAME" "$LINES" "$COUNT" "$WHAT"
+        printf '| `%s` | %s %s | %s | %s |\n' "$NAME" "$LINES" "$UNIT" \
+               "$COUNT" "$WHAT"
     done
 } > "$OUT/README.md"
 
