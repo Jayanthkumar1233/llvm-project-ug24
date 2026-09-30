@@ -162,7 +162,7 @@ Useful options:
 | `--dump` | Write the whole 64 KB memory to `ug24-memory.bin` on exit |
 | `--max N` | Stop after N instructions instead of the 20,000,000 default |
 | `--quiet` | Print only what the program itself wrote |
-| `--io-map` | Print the peripheral map bound for this image, and where it came from |
+| `--io-map` | Print the peripheral map bound for this image, address by address, naming the symbol each one came from or saying the image was silent |
 
 The exit status is what the program returned, except for three diagnostics:
 

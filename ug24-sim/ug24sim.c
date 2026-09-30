@@ -61,20 +61,45 @@
 // docs/uG24-platform.md.  An image that moves its MMIO window therefore moves
 // this simulator's peripherals with it, and no address has to be agreed out
 // of band.
+// Provenance is per register, not per image: an image built before the map was
+// published carries __mmio_base but none of the register symbols, so "did this
+// come from the ELF?" has to be answered one address at a time or the answer
+// misleads in exactly the case worth diagnosing.
+enum {
+    IO_BASE, IO_END,
+    IO_UART_TX, IO_UART_STATUS, IO_SIM_EXIT,
+    IO_IRQ_STATUS, IO_IRQ_ENABLE, IO_IRQ_RAISE, IO_TIMER_LOAD,
+    IO_COUNT
+};
+
 typedef struct {
-    uint16_t base, end;
-    uint16_t uart_tx, uart_status, sim_exit;
-    uint16_t irq_status, irq_enable, irq_raise, timer_load;
-    int      from_elf;        // non-zero once a symbol has been honoured
+    uint16_t addr[IO_COUNT];
+    uint8_t  from_elf[IO_COUNT];   // this address came out of the symbol table
 } Periph;
 
+// Indexed by the enum above: the symbol the linker script defines, the name to
+// print, and the address to fall back to when the image publishes neither.
+static const struct {
+    const char *symbol;
+    const char *label;
+    uint16_t    fallback;
+} kPeriph[IO_COUNT] = {
+    { "__mmio_base",        "window base", MMIO_BASE   },
+    { "__mmio_end",         "window end",  MMIO_END    },
+    { "__ug24_uart_tx",     "uart_tx",     UART_TX     },
+    { "__ug24_uart_status", "uart_status", UART_STATUS },
+    { "__ug24_sim_exit",    "sim_exit",    SIM_EXIT    },
+    { "__ug24_irq_status",  "irq_status",  IRQ_STATUS  },
+    { "__ug24_irq_enable",  "irq_enable",  IRQ_ENABLE  },
+    { "__ug24_irq_raise",   "irq_raise",   IRQ_RAISE   },
+    { "__ug24_timer_load",  "timer_load",  TIMER_LOAD  },
+};
+
 static void periph_defaults(Periph *p) {
-    p->base        = MMIO_BASE;   p->end         = MMIO_END;
-    p->uart_tx     = UART_TX;     p->uart_status = UART_STATUS;
-    p->sim_exit    = SIM_EXIT;
-    p->irq_status  = IRQ_STATUS;  p->irq_enable  = IRQ_ENABLE;
-    p->irq_raise   = IRQ_RAISE;   p->timer_load  = TIMER_LOAD;
-    p->from_elf    = 0;
+    for (int i = 0; i < IO_COUNT; i++) {
+        p->addr[i]     = kPeriph[i].fallback;
+        p->from_elf[i] = 0;
+    }
 }
 
 // PSW bit positions, from the uG24 register spreadsheet.
@@ -127,32 +152,32 @@ typedef struct {
 // differently from plain memory.  Instruction fetch does not: code cannot be
 // executed out of the MMIO region.
 static uint8_t mem_read(Core *c, uint16_t addr) {
-    if (addr >= c->io.base && addr <= c->io.end) {
-        if (addr == c->io.uart_status) return 1;  // always ready for a byte
-        if (addr == c->io.irq_status)  return c->irq_pending;
-        if (addr == c->io.irq_enable)  return c->irq_enable;
-        if (addr == c->io.timer_load)  return c->timer_load;
+    if (addr >= c->io.addr[IO_BASE] && addr <= c->io.addr[IO_END]) {
+        if (addr == c->io.addr[IO_UART_STATUS]) return 1;  // always ready
+        if (addr == c->io.addr[IO_IRQ_STATUS])  return c->irq_pending;
+        if (addr == c->io.addr[IO_IRQ_ENABLE])  return c->irq_enable;
+        if (addr == c->io.addr[IO_TIMER_LOAD])  return c->timer_load;
         return 0;
     }
     return c->mem[addr];
 }
 
 static void mem_write(Core *c, uint16_t addr, uint8_t value) {
-    if (addr >= c->io.base && addr <= c->io.end) {
-        if (addr == c->io.uart_tx) {
+    if (addr >= c->io.addr[IO_BASE] && addr <= c->io.addr[IO_END]) {
+        if (addr == c->io.addr[IO_UART_TX]) {
             fputc(value, stdout);
             fflush(stdout);
-        } else if (addr == c->io.sim_exit) {
+        } else if (addr == c->io.addr[IO_SIM_EXIT]) {
             c->exit_code = value;
             c->halted = 1;
-        } else if (addr == c->io.irq_status) {
+        } else if (addr == c->io.addr[IO_IRQ_STATUS]) {
             // Write-one-to-clear, which is what a handler does on the way out.
             c->irq_pending &= (uint8_t)~value;
-        } else if (addr == c->io.irq_enable) {
+        } else if (addr == c->io.addr[IO_IRQ_ENABLE]) {
             c->irq_enable = value;
-        } else if (addr == c->io.irq_raise) {
+        } else if (addr == c->io.addr[IO_IRQ_RAISE]) {
             c->irq_pending |= (uint8_t)(1u << (value & 7));
-        } else if (addr == c->io.timer_load) {
+        } else if (addr == c->io.addr[IO_TIMER_LOAD]) {
             c->timer_load = value;
             c->timer_count = value;
         }
@@ -213,21 +238,10 @@ static uint16_t data_base(Core *c) {
 // One symbol from the image's symbol table, against the peripheral map.  The
 // names are the linker-script assignments in ug24-runtime/ug24.ld.
 static void bind_periph(Periph *p, const char *name, uint16_t value) {
-    static const struct { const char *name; size_t offset; } kMap[] = {
-        { "__mmio_base",        offsetof(Periph, base)        },
-        { "__mmio_end",         offsetof(Periph, end)         },
-        { "__ug24_uart_tx",     offsetof(Periph, uart_tx)     },
-        { "__ug24_uart_status", offsetof(Periph, uart_status) },
-        { "__ug24_sim_exit",    offsetof(Periph, sim_exit)    },
-        { "__ug24_irq_status",  offsetof(Periph, irq_status)  },
-        { "__ug24_irq_enable",  offsetof(Periph, irq_enable)  },
-        { "__ug24_irq_raise",   offsetof(Periph, irq_raise)   },
-        { "__ug24_timer_load",  offsetof(Periph, timer_load)  },
-    };
-    for (size_t i = 0; i < sizeof kMap / sizeof kMap[0]; i++) {
-        if (strcmp(name, kMap[i].name) != 0) continue;
-        *(uint16_t *)((char *)p + kMap[i].offset) = value;
-        p->from_elf = 1;
+    for (int i = 0; i < IO_COUNT; i++) {
+        if (strcmp(name, kPeriph[i].symbol) != 0) continue;
+        p->addr[i]     = value;
+        p->from_elf[i] = 1;
         return;
     }
 }
@@ -816,17 +830,20 @@ int main(int argc, char **argv) {
     // --io-map answers "where does this image think its console is?", which is
     // the question to ask first when a program runs but prints nothing.
     if (show_io) {
-        fprintf(stderr, "peripheral map (%s):\n",
-                c->io.from_elf ? "from the ELF symbol table"
-                               : "built-in defaults, image published none");
-        fprintf(stderr, "  window      %04x-%04x\n", c->io.base, c->io.end);
-        fprintf(stderr, "  uart_tx     %04x\n", c->io.uart_tx);
-        fprintf(stderr, "  uart_status %04x\n", c->io.uart_status);
-        fprintf(stderr, "  sim_exit    %04x\n", c->io.sim_exit);
-        fprintf(stderr, "  irq_status  %04x\n", c->io.irq_status);
-        fprintf(stderr, "  irq_enable  %04x\n", c->io.irq_enable);
-        fprintf(stderr, "  irq_raise   %04x\n", c->io.irq_raise);
-        fprintf(stderr, "  timer_load  %04x\n", c->io.timer_load);
+        int published = 0;
+        for (int i = 0; i < IO_COUNT; i++) published += c->io.from_elf[i];
+
+        fprintf(stderr, "peripheral map: %d of %d addresses from the ELF "
+                        "symbol table\n", published, IO_COUNT);
+        for (int i = 0; i < IO_COUNT; i++)
+            fprintf(stderr, "  %-11s %04x   %s\n", kPeriph[i].label,
+                    c->io.addr[i],
+                    c->io.from_elf[i] ? kPeriph[i].symbol
+                                      : "(built-in default, image is silent)");
+        if (published != IO_COUNT)
+            fprintf(stderr, "  an image built before the map was published "
+                            "says nothing about the missing ones; see "
+                            "docs/uG24-platform.md\n");
     }
     c->pc = entry;
     // A real uG24 takes its reset SP from the strapped i_reset_sp pin.  The
@@ -836,7 +853,8 @@ int main(int argc, char **argv) {
     // inside it and pushes there would be swallowed rather than stored.
     // Seeding it this way also keeps the bounds check below from firing on the
     // instructions before crt0 has set SP.
-    c->sp = c->stack_high ? c->stack_high : (uint16_t)(c->io.base - 2);
+    c->sp = c->stack_high ? c->stack_high
+                         : (uint16_t)(c->io.addr[IO_BASE] - 2);
 
     while (!c->halted && c->cycles < max_steps) {
         step(c);
