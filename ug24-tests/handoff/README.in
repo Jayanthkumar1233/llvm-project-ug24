@@ -1,0 +1,75 @@
+# uG24 cross-check kit
+
+Five programs built by the uG24 LLVM toolchain, each with the console output
+and the instruction count our simulator produces. The point is to let a second,
+independently written simulator be checked against a second implementation
+without either side having to trust the other's paperwork.
+
+Built from commit `@COMMIT@` at `@BUILT@`.
+
+## Run them
+
+```sh
+your-simulator 01_hello.elf > got.txt
+diff got.txt 01_hello.expected
+```
+
+Every `.expected` file is what our simulator prints, and every answer in it is
+also checkable by hand — `25 + 17` is 42, the sum of 1 to 100 is 5050, 8! is
+40320, 48879 is `0xBEEF`. If a line disagrees, the arithmetic in the program
+says which of us is wrong, without either simulator being the referee.
+
+All five `.expected` files are also byte-for-byte identical to the same source
+compiled with host `gcc` and run against glibc on x86-64 — including
+`05_float`, where `float` arithmetic printed to six decimals rounds the same on
+both. So they are not merely "what our simulator did": they agree with a
+completely unrelated compiler and C library. `make-handoff.sh` re-checks that
+every time it builds the kit.
+
+`*.count` holds the number of instructions our simulator retired. The same
+image on a correct simulator retires exactly the same number, so a count that
+differs by more than a rounding of how you count `WFI` is a real divergence and
+worth chasing even when the output matches.
+
+## Read the console address out of the ELF, do not guess it
+
+The uG24 core contains no UART, so neither the ISA specification nor the
+encoding spreadsheet says where console output goes — that is a decision of
+whichever SoC wraps the core, and it cannot be derived from those documents.
+
+Every image here therefore publishes its own peripheral map as absolute symbols
+in the symbol table:
+
+```sh
+llvm-readelf -s 02_integers.elf | grep -E '__ug24_|__mmio_'
+```
+
+`uG24-platform.md`, included here, has the map, all nine symbol names, a thirty
+line loader that reads them, and the rest of what these files assume that the
+ISA documents do not cover. Read it before anything else.
+
+## Four things that catch a new simulator
+
+1. **Start at `e_entry`, not at address 0.** It is genuinely not always zero:
+   the vector table's `LJA` at 0 works only if you honour the entry point.
+2. **Load by `p_paddr` from the program headers**, not by section name.
+   `04_memory` is the one that catches this: `.data` has a load address
+   distinct from its run address, and `crt0` copies it before `main`.
+3. **`WFI` must halt when no interrupt can arrive**, and wait when one still
+   can. `crt0` ends in `wfi` / `jr`, so a simulator that always waits hangs at
+   the end of every program. A program calling `exit()` writes the exit
+   register instead.
+4. **Sizes are not the host's.** `int` is 16 bits, `long` 32, `long long` 64,
+   pointers 16, and `double` is IEEE **single** precision, 32 bits, like AVR.
+   That last one is why `05_float` prints `355 / 113 = 3.141593` and stops
+   there: a host printing `3.14159292` is using a 64-bit double and is not
+   disagreeing.
+
+## If a program prints nothing
+
+Check the console address first, not the instruction decode. `01_hello` is the
+smallest test of that: a handful of stores to the transmit register and the end
+of `main`. If it prints nothing, the address is wrong; if it prints and then
+hangs, `WFI` is wrong.
+
+`SHA256SUMS` is there so we can confirm we are both looking at the same bytes.

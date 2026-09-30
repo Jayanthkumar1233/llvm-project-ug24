@@ -227,24 +227,43 @@ The cost of that default, measured:
 | Program | Size |
 | :--- | ---: |
 | `printf("Hello ug24\n")` — optimised to `puts`, no formatter at all | 300 bytes |
-| `printf("%d\n", n)` | 14,944 bytes |
-| the same, opting out of the float formatter | 8,172 bytes |
-| `printf("%f\n", x)` | 14,960 bytes |
+| `printf("%d\n", n)` | 17,144 bytes |
+| the same, opting out of the 64-bit formatter | 16,232 bytes |
+| the same, opting out of the float formatter | 11,480 bytes |
+| the same, opting out of both | 9,342 bytes |
+| `printf("%f\n", x)` | 17,160 bytes |
 
-Measured with `llvm-size` at `-Os`. Each figure is four to eight bytes above
-what the same program cost while the peripheral addresses were literals rather
-than symbols the linker script defines (§5 of this document): `lo8`/`hi8` of a
-relocation assembles to the same two `MVI`s as `lo8`/`hi8` of a constant, so
-the cost is not per access. The symbols add about 270 bytes of symbol table,
-which is neither loaded nor executed.
+Measured with `llvm-size` at `-Os`. Two defaults are folded into those
+numbers, and both were chosen the same way: a conversion that silently prints
+the wrong answer is worse than a program that is larger than it needed to be.
 
-**Opting out** needs no flag and no compiler support: define the symbol
-yourself and the archive member is never extracted.
+**Opting out** of either needs no flag and no compiler support. Define the
+symbol yourself and the archive member is never extracted.
 
 ```c
 int __ug24_format_float(char *out, unsigned long bits, int precision, char conv)
 { (void)bits; (void)precision; (void)conv; out[0] = '?'; return 1; }
+
+int __ug24_format_u64(char *out, unsigned long long value, unsigned base,
+                      const char *alphabet)
+{ (void)value; (void)base; (void)alphabet; out[0] = '?'; return 1; }
 ```
+
+The 64-bit conversions are the newer of the two. `%lld` used to read four
+bytes of an eight-byte argument: the value printed truncated to 32 bits, and
+the four bytes left on the stack desynchronised every later argument in the
+same call, so `printf("%lld %d", big, 77)` printed a wrong number followed by
+a wrong `int`. `%zu` had the mirror-image fault — `size_t` is 16 bits here, and
+reading a 32-bit `long` for it consumed two bytes too many. Both are fixed, and
+`ug24-tests/suite/t12_int64.c` now checks the conversions and the argument
+alignment behind them against glibc.
+
+Neither formatter divides. `__udivdi3` exists, but one call is on the order of
+thirty thousand instructions, and a twenty-digit number would need twenty of
+them; subtracting powers of ten costs at most nine subtractions per digit.
+
+The peripheral symbols of §5 add about 270 bytes of symbol table to every
+image, which is neither loaded nor executed.
 
 ### A rejected design, recorded because it was implemented first
 

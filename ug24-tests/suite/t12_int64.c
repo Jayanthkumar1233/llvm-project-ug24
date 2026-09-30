@@ -13,7 +13,9 @@
  */
 #include <stdio.h>
 
-/* printf has no 64-bit conversion, so every value goes out as two halves.
+/* The bit patterns go out as two halves rather than through %llx, so that a
+ * fault in the arithmetic and a fault in the formatting cannot mask each
+ * other; printf's own 64-bit conversions are checked separately at the end.
  * The masks matter: `unsigned long` is 32 bits on the uG24 and 64 on the
  * host, and without them the two builds would print different widths. */
 static void show(const char *what, unsigned long long value) {
@@ -70,6 +72,21 @@ int main(void) {
 #else
     printf("divzero 1\n");
 #endif
+
+    /* printf's own 64-bit conversions.  These used to read four bytes of an
+     * eight-byte argument: the value came out truncated to 32 bits and the
+     * four bytes left behind desynchronised every later argument in the same
+     * call, so "%lld %d" printed a wrong number and then a wrong int.  The
+     * last two lines are there to catch that specifically. */
+    printf("lld     %lld\n", 9000000000LL);
+    printf("lld-neg %lld\n", -9000000000LL);
+    printf("lld-min %lld\n", -9223372036854775807LL - 1);
+    printf("llu-max %llu\n", 18446744073709551615ULL);
+    printf("llx     %llx %llX\n", a, a);
+    printf("llo     %llo\n", 0777777777777ULL);
+    printf("ll-pad  [%14lld] [%-14lld] [%014lld]\n", 42LL, 42LL, 42LL);
+    printf("ll-then %lld %d %s\n", 9000000000LL, 77, "ok");
+    printf("zu-then %zu %d\n", sizeof(long long), 77);
 
     printf("PASS - 64-bit arithmetic\n");
     return 0;

@@ -50,54 +50,9 @@ static int copy_literal(char *out, const char *text) {
 // a million instructions that way.  Subtraction is at most nine steps per
 // digit, and 64-bit compare and subtract are expanded inline by the backend,
 // so this needs no helper at all.
-static const u64 kPowersOfTen[] = {
-  10000000000000000000ULL, 1000000000000000000ULL, 100000000000000000ULL,
-  10000000000000000ULL,    1000000000000000ULL,    100000000000000ULL,
-  10000000000000ULL,       1000000000000ULL,       100000000000ULL,
-  10000000000ULL,          1000000000ULL,          100000000ULL,
-  10000000ULL,             1000000ULL,             100000ULL,
-  10000ULL,                1000ULL,                100ULL,
-  10ULL,                   1ULL,
-};
+int __ug24_u64_to_decimal(char *out, u64 value);
+int __ug24_decimal_digits(u64 value);
 
-#define POWERS_OF_TEN (sizeof kPowersOfTen / sizeof kPowersOfTen[0])
-
-static int format_u64(char *out, u64 value) {
-  int len = 0, leading = 1;
-  unsigned i;
-
-  for (i = 0; i < POWERS_OF_TEN; i++) {
-    u64 power = kPowersOfTen[i];
-    u8 digit = 0;
-
-    while (value >= power) {
-      value -= power;
-      digit++;
-    }
-    if (digit)
-      leading = 0;
-    if (!leading)
-      out[len++] = (char)('0' + digit);
-  }
-
-  if (len == 0)
-    out[len++] = '0';            // the value was zero
-  return len;
-}
-
-/// Number of decimal digits in \p value, which is also where its decimal
-/// exponent sits: 1144 has four digits, so its exponent is 3.
-static int decimal_digits(u64 value) {
-  int n = 1;
-  unsigned i;
-
-  for (i = 0; i < POWERS_OF_TEN; i++)
-    if (value >= kPowersOfTen[i]) {
-      n = (int)(POWERS_OF_TEN - i);
-      break;
-    }
-  return n;
-}
 
 // Multiply a binary fraction -- a value scaled by 2^32, so 0.5 is
 // 0x80000000 -- by ten, returning the decimal digit that carried out of the
@@ -161,7 +116,7 @@ static int decimal_exponent(u64 integer_part, u32 fraction) {
   int k;
 
   if (integer_part)
-    return decimal_digits(integer_part) - 1;
+    return __ug24_decimal_digits(integer_part) - 1;
 
   for (k = 1; k <= 45; k++)
     if (mul10(&fraction))
@@ -192,7 +147,7 @@ static int format_fixed(char *out, u64 integer_part, u32 fraction,
       integer_part++;              // the carry ran off the top of the fraction
   }
 
-  len += format_u64(out + len, integer_part);
+  len += __ug24_u64_to_decimal(out + len, integer_part);
 
   if (precision > 0) {
     out[len++] = '.';

@@ -4,9 +4,11 @@
 // relatives, over the memory-mapped UART.  There is no operating system and no
 // file system, so every stream is the console.
 //
-// Floating point (%f, %e, %g) and long long (%lld) are supported: the target
-// has no FPU, so both go through the soft-float and 64-bit helpers in
-// ug24_float.c, ug24_printf_float.c and ug24_int64.c.
+// Floating point (%f, %e, %g) and 64-bit integers (%lld) are both supported.
+// The target has neither an FPU nor 64-bit arithmetic, so both go through the
+// helpers in ug24_float.c, ug24_printf_float.c and ug24_int64.c, and both
+// avoid 64-bit division: it exists but costs tens of thousands of
+// instructions.
 //
 //===----------------------------------------------------------------------===//
 
@@ -17,6 +19,7 @@
 typedef unsigned char u8;
 typedef unsigned short u16;
 typedef unsigned long u32;
+typedef unsigned long long u64;
 
 // The console comes from the linker script by way of <ug24.h>; see
 // docs/uG24-platform.md for why it is a symbol rather than an address.
@@ -93,14 +96,14 @@ typedef struct {
   unsigned alt   : 1;   ///< '#'
 } Flags;
 
-static void emit_number(Sink *sink, u32 value, unsigned base, int is_negative,
-                        Flags flags, int width, int precision,
-                        const char *alphabet) {
-  char digits[BUF_DIGITS];
-  int count = to_digits(digits, value, base, alphabet);
-
+/// Everything about printing a number except producing its digits: sign,
+/// "0x", zero padding, field width and alignment.  \p digits holds \p count
+/// digits least significant first, as both to_digits functions return them.
+static void emit_digits(Sink *sink, const char *digits, int count, int is_zero,
+                        unsigned base, int is_negative, Flags flags, int width,
+                        int precision, const char *alphabet) {
   // A precision of zero prints nothing at all for a zero value.
-  if (precision == 0 && value == 0)
+  if (precision == 0 && is_zero)
     count = 0;
 
   int zeros = (precision > count) ? precision - count : 0;
@@ -111,8 +114,8 @@ static void emit_number(Sink *sink, u32 value, unsigned base, int is_negative,
   else if (flags.space) sign = ' ';
 
   int prefix = 0;
-  if (flags.alt && base == 16 && value != 0) prefix = 2;   // "0x"
-  else if (flags.alt && base == 8)           prefix = 1;   // "0"
+  if (flags.alt && base == 16 && !is_zero) prefix = 2;     // "0x"
+  else if (flags.alt && base == 8)         prefix = 1;     // "0"
 
   int body = count + zeros + (sign ? 1 : 0) + prefix;
 
@@ -142,6 +145,40 @@ static void emit_number(Sink *sink, u32 value, unsigned base, int is_negative,
 
   if (flags.left)
     sink_pad(sink, ' ', width - body);
+}
+
+static void emit_number(Sink *sink, u32 value, unsigned base, int is_negative,
+                        Flags flags, int width, int precision,
+                        const char *alphabet) {
+  char digits[BUF_DIGITS];
+  int count = to_digits(digits, value, base, alphabet);
+  emit_digits(sink, digits, count, value == 0, base, is_negative, flags, width,
+              precision, alphabet);
+}
+
+//===----------------------------------------------------------------------===//
+// 64-bit conversions
+//===----------------------------------------------------------------------===//
+//
+// %lld and %llu are separate from the 32-bit path because a u64 divide on this
+// target is a library call costing tens of thousands of instructions.  Base ten
+// therefore borrows the digit loop in ug24_printf_float.c, which subtracts
+// powers of ten instead of dividing and is linked with printf anyway; the other
+// bases are shifts.
+
+// Producing the digits lives in ug24_printf_u64.c, referenced normally so that
+// %lld is correct without a flag, and in its own archive member so a program
+// that never prints one can replace it and get the space back.
+int __ug24_format_u64(char *out, u64 value, unsigned base,
+                      const char *alphabet);
+
+static void emit_number64(Sink *sink, u64 value, unsigned base,
+                          int is_negative, Flags flags, int width,
+                          int precision, const char *alphabet) {
+  char digits[BUF_DIGITS];
+  int count = __ug24_format_u64(digits, value, base, alphabet);
+  emit_digits(sink, digits, count, value == 0, base, is_negative, flags, width,
+              precision, alphabet);
 }
 
 //===----------------------------------------------------------------------===//
@@ -196,13 +233,27 @@ static int format(Sink *sink, const char *fmt, va_list ap) {
       }
     }
 
-    // Length modifier.  'h' and 'hh' are absorbed by the default argument
-    // promotions; 'l' and 'z' select the 32-bit path.
-    int is_long = 0;
+    // Length modifier.  Each one has to match the width the caller actually
+    // pushed, or va_arg consumes the wrong number of bytes and every later
+    // argument in the same call comes out wrong too.
+    //
+    //   h, hh  absorbed by the default argument promotions
+    //   l      long, 32 bits
+    //   ll     long long, 64 bits
+    //   j      intmax_t, which is long long here
+    //   z, t   size_t and ptrdiff_t, both 16 bits on this target, so they take
+    //          the default path -- reading a long for them used to consume two
+    //          bytes too many
+    int is_long = 0, is_long_long = 0;
     for (;;) {
-      if (*fmt == 'h')                       { fmt++; continue; }
-      if (*fmt == 'l' || *fmt == 'z' ||
-          *fmt == 'j' || *fmt == 't')        { is_long = 1; fmt++; continue; }
+      if (*fmt == 'h' || *fmt == 'z' || *fmt == 't') { fmt++; continue; }
+      if (*fmt == 'j')             { is_long_long = 1; fmt++; continue; }
+      if (*fmt == 'l') {
+        fmt++;
+        if (*fmt == 'l') { is_long_long = 1; fmt++; }
+        else             { is_long = 1; }
+        continue;
+      }
       break;
     }
 
@@ -210,6 +261,14 @@ static int format(Sink *sink, const char *fmt, va_list ap) {
     switch (conv) {
     case 'd':
     case 'i': {
+      if (is_long_long) {
+        long long value = va_arg(ap, long long);
+        int negative = value < 0;
+        u64 magnitude = negative ? (u64)(-value) : (u64)value;
+        emit_number64(sink, magnitude, 10, negative, flags, width, precision,
+                      digits_lower);
+        break;
+      }
       long value = is_long ? va_arg(ap, long) : (long)va_arg(ap, int);
       int negative = value < 0;
       u32 magnitude = negative ? (u32)(-value) : (u32)value;
@@ -217,24 +276,20 @@ static int format(Sink *sink, const char *fmt, va_list ap) {
                   digits_lower);
       break;
     }
-    case 'u': {
-      u32 value = is_long ? va_arg(ap, unsigned long)
-                          : (u32)va_arg(ap, unsigned int);
-      emit_number(sink, value, 10, 0, flags, width, precision, digits_lower);
-      break;
-    }
+    case 'u':
     case 'x':
-    case 'X': {
-      u32 value = is_long ? va_arg(ap, unsigned long)
-                          : (u32)va_arg(ap, unsigned int);
-      emit_number(sink, value, 16, 0, flags, width, precision,
-                  conv == 'X' ? digits_upper : digits_lower);
-      break;
-    }
+    case 'X':
     case 'o': {
+      unsigned base = (conv == 'u') ? 10 : (conv == 'o') ? 8 : 16;
+      const char *alphabet = (conv == 'X') ? digits_upper : digits_lower;
+      if (is_long_long) {
+        u64 value = va_arg(ap, unsigned long long);
+        emit_number64(sink, value, base, 0, flags, width, precision, alphabet);
+        break;
+      }
       u32 value = is_long ? va_arg(ap, unsigned long)
                           : (u32)va_arg(ap, unsigned int);
-      emit_number(sink, value, 8, 0, flags, width, precision, digits_lower);
+      emit_number(sink, value, base, 0, flags, width, precision, alphabet);
       break;
     }
     case 'p': {

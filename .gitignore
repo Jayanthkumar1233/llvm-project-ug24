@@ -36,3 +36,4 @@ ug24-memory.bin
 /ug24-sim/**/*.ll
 /ug24-sim/**/*.o
 !/ug24-runtime/crt0.s
+ug24-handoff/

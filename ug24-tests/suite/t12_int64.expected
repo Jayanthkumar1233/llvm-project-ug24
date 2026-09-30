@@ -21,4 +21,13 @@ smod       ffffffffffffffff
 sdiv-nn    0000002142f30249
 cmp 1 1 1 1
 divzero 1
+lld     9000000000
+lld-neg -9000000000
+lld-min -9223372036854775808
+llu-max 18446744073709551615
+llx     123456789abcdef 123456789ABCDEF
+llo     777777777777
+ll-pad  [            42] [42            ] [00000000000042]
+ll-then 9000000000 77 ok
+zu-then 8 77
 PASS - 64-bit arithmetic
