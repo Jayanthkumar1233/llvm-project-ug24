@@ -34,16 +34,35 @@ calls through a function-pointer array.
 
 ## ROM and RAM
 
+**The 64 KB is the whole address space, not RAM.** One 16-bit address bus, so
+code, data and peripherals share 65,536 addresses — "Implements 16-bit address
+bus i.e. 64KB Total Addressable Memory". Our earlier flat 64 KB linker region was
+a placeholder because nobody had told us where the boundary was; it never claimed
+64 KB of RAM. The confirmed 32 KB + 32 KB fills that space **exactly**, with
+nothing spare, which is precisely why the console of question 2 has nowhere to go.
+
 | # | Question |
 | ---: | :--- |
-| 3 | Are 32 KB ROM and 32 KB RAM fixed for this part, or configurable (the TCM parameters)? |
+| 3 | Where do ITCM and DTCM sit in a map that is already full, and at what sizes? Which configurable stack size (1/2/4/8 KB) should we assume? |
 | 4 | Is there a part or configuration with more than 32 KB of ROM? |
 | 5 | Is all 32 KB of RAM usable, and where does the stack start given the peripherals of question 2? |
 | 6 | Is ROM writable at run time, or write-protected after boot? |
 
+Why 3 is asked that way: the spec lists TCM as configurable at 0/1/2/4/8/16 KB,
+so **no TCM option is 32 KB**. The spec also says firmware "may reside in the
+ITCM or an on-chip ROM/RAM or some external memory", so we read the 32/32 split
+as ROM and RAM over AHB rather than as TCM — but a configured TCM then has to
+overlay part of the same 64 KB, and we need to know where.
+
 Why 4 is asked: the largest acceptance-suite program is 30,888 bytes at `-O0`
 against a 32,768-byte region — 5.7% spare. About 15 KB of that is `printf`'s own
 decimal conversion for soft float and 64-bit integers, not the test.
+
+Worth knowing about question 2: the spec calls the configuration of these blocks
+"SYSTEM IMPLEMENTATION DEFINED" and names the memory and the interrupt controller
+as SoC blocks around the core, not parts of it. The peripheral map may therefore
+not be a core-specification question at all, in which case we need whoever owns
+the SoC memory map.
 
 ## Needed to finish
 
@@ -64,8 +83,9 @@ decimal conversion for soft float and 64-bit integers, not the test.
 ## Closed by these two sources — do not re-ask
 
 Pipeline interlocks and load-use delay (no gap needed between loads); reset SP
-set by boot code with the stack top in ROM; what the startup code is responsible
-for; `NOP` = `0000_0000`; `JA` byte addressing; little-endian fetch and `PUSH`;
+set by boot code with the stack top in ROM — the spec separately calls PC and SP
+reset-strapped, and both hold, since `crt0` always loads SP and the strapped
+value only matters before it runs; what the startup code is responsible for; `NOP` = `0000_0000`; `JA` byte addressing; little-endian fetch and `PUSH`;
 `R14` as `DPTR0`'s low byte; branch displacement in instruction words; the type
 sizes; the alignments; `e_machine = 0xBA51`; the relocation numbering; the triple
 `ug24-unknown-elf`; the descending stack.
