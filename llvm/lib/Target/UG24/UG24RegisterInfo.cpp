@@ -46,9 +46,11 @@ BitVector UG24RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   Reserved.set(UG24::SP);
   Reserved.set(UG24::PSW);
 
-  // R11 is the expansion temporary, so the pair containing it is unusable.
-  Reserved.set(UG24::R11);
-  Reserved.set(UG24::P5);
+  // DPTR1 (R13:R12) is reserved by the ABI.  R12 doubles as the expansion
+  // temporary, which is why R11 is allocatable and P5 with it.
+  Reserved.set(UG24::R12);
+  Reserved.set(UG24::R13);
+  Reserved.set(UG24::DPTR1);
 
   // DPTR0 (R15:R14) is the dedicated memory base register.
   Reserved.set(UG24::R14);

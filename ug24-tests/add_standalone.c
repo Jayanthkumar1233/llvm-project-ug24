@@ -11,7 +11,7 @@
 //
 //   Build and run:   ug24-tests/ug24-run.sh ug24-tests/add_standalone.c
 //   Other levels:    OPT=-O0 ug24-tests/ug24-run.sh ug24-tests/add_standalone.c
-//   Freestanding:    clang --target=ug24-unknown-none-eabi -Os \
+//   Freestanding:    clang --target=ug24-unknown-elf -Os \
 //                          add_standalone.c -o add_standalone.elf
 //
 //===----------------------------------------------------------------------===//

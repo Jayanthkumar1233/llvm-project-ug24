@@ -56,9 +56,9 @@ UG24::UG24() {
 RelExpr UG24::getRelExpr(RelType type, const Symbol &s,
                          const uint8_t *loc) const {
   switch (type) {
-  case R_UG24_PCREL10:
+  case R_UG2408_PCREL10:
     return R_PC;
-  case R_UG24_NONE:
+  case R_UG2408_NONE:
     return R_NONE;
   default:
     return R_ABS;
@@ -67,35 +67,36 @@ RelExpr UG24::getRelExpr(RelType type, const Symbol &s,
 
 void UG24::relocate(uint8_t *loc, const Relocation &rel, uint64_t val) const {
   switch (rel.type) {
-  case R_UG24_NONE:
+  case R_UG2408_NONE:
     break;
 
-  case R_UG24_8:
+  case R_UG2408_8:
     checkUInt(loc, val, 8, rel);
     *loc = val & 0xff;
     break;
 
-  case R_UG24_16:
-  case R_UG24_ABS16:
+  // One relocation for both a 16-bit datum and the second halfword of a
+  // JA/LJA: writing a 16-bit absolute address is the same operation either way.
+  case R_UG2408_16:
     checkUInt(loc, val, 16, rel);
     write16le(loc, val & 0xffff);
     break;
 
-  case R_UG24_32:
+  case R_UG2408_32:
     write32le(loc, val & 0xffffffff);
     break;
 
-  case R_UG24_LO8:
+  case R_UG2408_LO8:
     // The byte goes into the imm8 field at Inst{15-8}, i.e. the high byte of
     // the little-endian halfword.
     loc[1] = val & 0xff;
     break;
 
-  case R_UG24_HI8:
+  case R_UG2408_HI8:
     loc[1] = (val >> 8) & 0xff;
     break;
 
-  case R_UG24_PCREL10: {
+  case R_UG2408_PCREL10: {
     // The hardware adds the encoded amount to the address of the instruction
     // that follows the branch, counting in 2-byte instruction words.
     int64_t offset = static_cast<int64_t>(val) - 2;

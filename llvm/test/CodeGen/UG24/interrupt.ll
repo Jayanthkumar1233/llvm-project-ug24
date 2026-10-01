@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=ug24-unknown-none-eabi < %s | FileCheck %s
+; RUN: llc -mtriple=ug24-unknown-elf < %s | FileCheck %s
 ;
 ; An interrupt handler is entered by the hardware, not by a call, so the
 ; caller-saved/callee-saved split does not apply to it: every register it

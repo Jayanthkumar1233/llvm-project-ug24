@@ -729,7 +729,19 @@ SDValue UG24TargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
   SmallVector<CCValAssign, 16> ArgLocs;
   CCState CCInfo(CallConv, IsVarArg, MF, ArgLocs, *DAG.getContext());
-  CCInfo.AnalyzeCallOperands(Outs, CC_UG24);
+
+  // Fixed arguments take registers, variadic ones always go on the stack, so
+  // the two cannot share one CCAssignFn: whether an argument is variadic is a
+  // property of the argument (ISD::OutputArg::IsFixed) and not of the call, and
+  // TableGen predicates cannot see it.  Analysing argument by argument is how
+  // every other target with this split does it.
+  for (unsigned i = 0, e = Outs.size(); i != e; ++i) {
+    MVT ArgVT = Outs[i].VT;
+    ISD::ArgFlagsTy ArgFlags = Outs[i].Flags;
+    CCAssignFn *Assign = Outs[i].IsFixed ? CC_UG24 : CC_UG24_VarArg;
+    if (Assign(i, ArgVT, ArgVT, CCValAssign::Full, ArgFlags, CCInfo))
+      report_fatal_error("failed to assign a uG24 call argument");
+  }
 
   unsigned NumBytes = CCInfo.getStackSize();
   Chain = DAG.getCALLSEQ_START(Chain, NumBytes, 0, DL);

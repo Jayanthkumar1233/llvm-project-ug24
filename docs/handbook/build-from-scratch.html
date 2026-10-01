@@ -217,7 +217,7 @@
         <tr><td><strong>toolchain-armhf</strong></td><td class="mono">armv7-linux-gnueabihf</td><td>32-bit ARM Linux userspace</td><td><code>qemu-arm</code></td></tr>
         <tr><td><strong>toolchain-arm64</strong></td><td class="mono">aarch64-linux-gnu</td><td>64-bit ARM Linux userspace</td><td><code>qemu-aarch64</code></td></tr>
         <tr><td><strong>toolchain-none-eabi</strong></td><td class="mono">arm-none-eabi</td><td>Cortex-M bare metal</td><td><code>qemu-system-arm</code></td></tr>
-        <tr><td><strong>build-ug24</strong></td><td class="mono">ug24-unknown-none-eabi</td><td>Custom 8-bit processor</td><td><code>ug24sim</code></td></tr>
+        <tr><td><strong>build-ug24</strong></td><td class="mono">ug24-unknown-elf</td><td>Custom 8-bit processor</td><td><code>ug24sim</code></td></tr>
       </tbody>
     </table>
   </div>
@@ -984,7 +984,7 @@ cat &lt;&lt;DONE
 
 uG24 toolchain ready.
 
-  compile and link   $BUILD/bin/clang --target=ug24-unknown-none-eabi -Os hello.c -o hello.elf
+  compile and link   $BUILD/bin/clang --target=ug24-unknown-elf -Os hello.c -o hello.elf
   run                ug24-sim/ug24sim hello.elf --quiet
   all build stages   ug24-tests/ug24-build.sh hello.c
 DONE</pre>
@@ -1026,7 +1026,7 @@ PASS
 
 uG24 toolchain ready.
 
-  compile and link   build-ug24/bin/clang --target=ug24-unknown-none-eabi -Os hello.c -o hello.elf
+  compile and link   build-ug24/bin/clang --target=ug24-unknown-elf -Os hello.c -o hello.elf
   run                ug24-sim/ug24sim hello.elf --quiet
   all build stages   ug24-tests/ug24-build.sh hello.c</pre></div>
 
@@ -1270,7 +1270,7 @@ int main(void) {
 }</pre>
   </div>
   <div class="cmd"><div class="cmd-label">shell</div>
-<pre>$LLVM_WORK/build-ug24/bin/clang <span class="k">--target</span>=ug24-unknown-none-eabi -Os \
+<pre>$LLVM_WORK/build-ug24/bin/clang <span class="k">--target</span>=ug24-unknown-elf -Os \
     /tmp/hello-ug24.c -o /tmp/hello-ug24.elf
 
 $LLVM_WORK/build-ug24/bin/llvm-readobj --file-headers /tmp/hello-ug24.elf \
@@ -1280,14 +1280,14 @@ $LLVM_WORK/ug24-sim/ug24sim /tmp/hello-ug24.elf <span class="k">--quiet</span></
   </div>
   <div class="expect"><span class="lbl">expected</span>
 <pre>Format: elf32-ug24
-  Machine: 0x9240
+  Machine: 0xBA51
 Hello ug24</pre></div>
 
   <div class="note">
     <span class="tag">Use llvm-readobj, not readelf, for uG24</span>
     <p>
       System <code>readelf</code> reports <code>Machine: &lt;unknown&gt;:
-      0x9240</code>. That is expected — <code>EM_UG24 = 0x9240</code> is a
+      0xBA51</code>. That is expected — <code>EM_UG24 = 0xBA51</code> is a
       private machine number binutils has never seen. The LLVM tools in
       <code>build-ug24/bin</code> know it.
     </p>

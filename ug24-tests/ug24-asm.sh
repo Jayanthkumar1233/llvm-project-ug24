@@ -31,7 +31,7 @@ SIM_BIN="$SIM_BIN"
 
 
 OPT=${OPT:--Os}
-TRIPLE=ug24-unknown-none-eabi
+TRIPLE=ug24-unknown-elf
 
 SRC=$1
 [ -n "$SRC" ] || { echo "usage: $0 prog.c [function]" >&2; exit 2; }

@@ -30,7 +30,7 @@ SIM="$SIM_BIN"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-"$BIN/clang" --target=ug24-unknown-none-eabi -Os \
+"$BIN/clang" --target=ug24-unknown-elf -Os \
     "$ROOT/ug24-tests/test_compiler.c" -o "$TMP/test.elf"
 
 cd "$TMP"

@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=ug24-unknown-none-eabi < %s | FileCheck %s
+; RUN: llc -mtriple=ug24-unknown-elf < %s | FileCheck %s
 
 define i8 @add8(i8 %a, i8 %b) {
 ; CHECK-LABEL: add8:

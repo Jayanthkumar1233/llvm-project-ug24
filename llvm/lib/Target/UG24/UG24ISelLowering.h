@@ -44,6 +44,15 @@ public:
   explicit UG24TargetLowering(const TargetMachine &TM,
                               const UG24Subtarget &STI);
 
+  // The soft-float comparison helpers -- __ltsf2 and the rest -- return C
+  // `int`, which is 16 bits here.  Without this the default of i32 applies and
+  // the caller reads a second register pair the callee never wrote, testing the
+  // sign of whatever happened to be in it.  AVR and MSP430 override this for
+  // the same reason.
+  MVT::SimpleValueType getCmpLibcallReturnType() const override {
+    return MVT::i16;
+  }
+
   const char *getTargetNodeName(unsigned Opcode) const override;
 
   SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;

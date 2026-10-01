@@ -2,15 +2,19 @@
 #error "ELF_RELOC must be defined"
 #endif
 
-ELF_RELOC(R_UG24_NONE,      0)
-// Plain data relocations.
-ELF_RELOC(R_UG24_8,         1)
-ELF_RELOC(R_UG24_16,        2)
-ELF_RELOC(R_UG24_32,        3)
-// 16-bit absolute address in the second halfword of a JA/LJA.
-ELF_RELOC(R_UG24_ABS16,     4)
+// Numbers and names are the ones confirmed by the hardware team; see
+// docs/uG24-assumptions.md.
+ELF_RELOC(R_UG2408_NONE,      0)
+// 16-bit absolute: write16le(S + A).  Covers both a 16-bit datum and the
+// second halfword of a JA/LJA, which are the same operation.
+ELF_RELOC(R_UG2408_16,        1)
 // Signed 10-bit instruction-word displacement in Inst{15-6} of a branch.
-ELF_RELOC(R_UG24_PCREL10,   5)
-// Low / high byte of a 16-bit address in the imm8 field of an MVI.
-ELF_RELOC(R_UG24_LO8,       6)
-ELF_RELOC(R_UG24_HI8,       7)
+ELF_RELOC(R_UG2408_PCREL10,   2)
+// 8-bit absolute.
+ELF_RELOC(R_UG2408_8,         3)
+// Low / high byte of a 16-bit address, for the imm8 field of an MVI.
+ELF_RELOC(R_UG2408_LO8,       4)
+ELF_RELOC(R_UG2408_HI8,       5)
+// Local extension, past the end of the confirmed list: a 32-bit datum, which
+// `.long symbol` needs and nothing in the confirmed set can express.
+ELF_RELOC(R_UG2408_32,        6)

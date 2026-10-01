@@ -1,4 +1,4 @@
-; RUN: llvm-mc -triple=ug24-unknown-none-eabi -show-encoding %s | FileCheck %s
+; RUN: llvm-mc -triple=ug24-unknown-elf -show-encoding %s | FileCheck %s
 ;
 ; Encodings are taken from "Copy of uG24xx1616uP_ISA.xlsx".
 

@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=ug24-unknown-none-eabi < %s | FileCheck %s
+; RUN: llc -mtriple=ug24-unknown-elf < %s | FileCheck %s
 ;
 ; The hardware MUL is an 8x8 -> 16 multiply landing in W, and DIV puts the
 ; quotient in W's low half and the remainder in its high half.  None of these

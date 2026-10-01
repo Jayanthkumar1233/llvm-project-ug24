@@ -858,10 +858,10 @@
           Every processor LLVM knows is identified by a <strong>triple</strong>,
           a short string naming the architecture, the vendor, the operating
           system and the ABI. The uG24's is
-          <code>ug24-unknown-none-eabi</code> — a uG24, from no particular
+          <code>ug24-unknown-elf</code> — a uG24, from no particular
           vendor, with no operating system. Separately, executable files carry a
           number saying which machine they are for; ARM is 40, x86-64 is 62, and
-          the uG24 was assigned <code>0x9240</code> in the private range.
+          the uG24 was assigned <code>0xBA51</code> in the private range.
         </p>
 
         <div class="cmd">
@@ -873,7 +873,7 @@
         <p>
           At this point the compiler could not produce a single instruction. But
           it knew the target existed, it would accept
-          <code>--target=ug24-unknown-none-eabi</code>, and the build was wired
+          <code>--target=ug24-unknown-elf</code>, and the build was wired
           end to end. Everything after this was filling in a shape that already
           fit.
         </p>
@@ -1239,10 +1239,13 @@ mvi  r15, hi8(message)   <span class="p">; high byte → R_UG24_HI8</span></pre>
             </svg>
           </div>
           <figcaption>
-            One flat 64 KB shared by code and data. The heap and the stack grow
-            toward each other through the same free space, which is the classic
-            way a small embedded program corrupts itself; the linker script names
-            the boundary so the simulator can check it on every instruction.
+            32 KB of ROM from address 0 and 32 KB of RAM from 0x8000, the map
+            the hardware team confirmed. The heap and the stack grow toward each
+            other through the same free RAM, which is the classic way a small
+            embedded program corrupts itself; the linker script names the
+            boundary so the simulator can check it on every instruction. Because
+            ROM and RAM are separate, an initialised variable travels in ROM and
+            is copied into RAM before main runs.
           </figcaption>
         </figure>
       </section>
@@ -1329,7 +1332,7 @@ mvi  r15, hi8(message)   <span class="p">; high byte → R_UG24_HI8</span></pre>
 
         <div class="cmd">
           <div class="cmd-label">Compile and run, on a machine with no uG24 in it</div>
-<pre><span class="p">$</span> clang --target=ug24-unknown-none-eabi -Os hello.c -o hello.elf
+<pre><span class="p">$</span> clang --target=ug24-unknown-elf -Os hello.c -o hello.elf
 <span class="p">$</span> ug24sim hello.elf --quiet
 <span class="o">Hello ug24</span></pre>
         </div>
@@ -1864,13 +1867,13 @@ printf("Answer: %f\n", ans);
           <div><dt>Soft float</dt><dd>Floating-point arithmetic done by library functions because the processor has no floating-point hardware.</dd></div>
           <div><dt>Subtarget feature</dt><dd>An optional piece of hardware that some members of a processor family have and others do not — here, the multiplier and the divider.</dd></div>
           <div><dt>TableGen</dt><dd>LLVM's declarative language for describing a processor once and generating the assembler, disassembler, encoder and pattern matcher from that one description.</dd></div>
-          <div><dt>Triple</dt><dd>The string identifying a target: <code>ug24-unknown-none-eabi</code> is a uG24, no vendor, no operating system.</dd></div>
+          <div><dt>Triple</dt><dd>The string identifying a target: <code>ug24-unknown-elf</code> is a uG24, no vendor, no operating system.</dd></div>
         </dl>
       </section>
 
       <footer>
         <p>
-          uG24 toolchain · LLVM 17.0.6 · <code>ug24-unknown-none-eabi</code>.
+          uG24 toolchain · LLVM 17.0.6 · <code>ug24-unknown-elf</code>.
           Companion to <a href="index.html">the toolchain handbook</a> and
           <a href="build-from-scratch.html">the build procedure</a>. Figures in
           this document were measured against the repository at the time of

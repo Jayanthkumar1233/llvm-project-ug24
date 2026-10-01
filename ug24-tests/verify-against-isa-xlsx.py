@@ -122,7 +122,7 @@ def our_asm(mnemonic):
     return op + ('\t' + ', '.join(out) if out else '')
 
 def assemble(text):
-    p = subprocess.run([MC, '-triple=ug24-unknown-none-eabi', '-show-encoding'],
+    p = subprocess.run([MC, '-triple=ug24-unknown-elf', '-show-encoding'],
                        input=text + '\n', capture_output=True, text=True)
     if p.returncode != 0:
         return None, p.stderr.strip().splitlines()[0] if p.stderr else 'failed'
@@ -170,7 +170,7 @@ FUNC = {'beq': 0b0000, 'bne': 0b0001, 'blt': 0b0010, 'ble': 0b0011,
         'jr':  0b1100, 'ljr': 0b1101}
 
 def assemble(text):
-    p = subprocess.run([MC, '-triple=ug24-unknown-none-eabi', '-filetype=obj',
+    p = subprocess.run([MC, '-triple=ug24-unknown-elf', '-filetype=obj',
                         '-o', os.path.join(WORK, 'br.o')], input=text + '\n',
                        capture_output=True, text=True)
     if p.returncode:

@@ -231,13 +231,13 @@ bool UG24ExpandPseudo::expandMI(MachineBasicBlock &MBB,
     const unsigned SequenceBytes = 16;
 
     BuildMI(MBB, MI, DL, TII->get(UG24::MOVXPC), UG24::DPTR0);
-    BuildMI(MBB, MI, DL, TII->get(UG24::MVI), UG24::R11).addImm(0);
+    BuildMI(MBB, MI, DL, TII->get(UG24::MVI), UG24::R12).addImm(0);
     BuildMI(MBB, MI, DL, TII->get(UG24::ADI), UG24::R14)
         .addReg(UG24::R14)
         .addImm(SequenceBytes);
     BuildMI(MBB, MI, DL, TII->get(UG24::ADC), UG24::R15)
         .addReg(UG24::R15)
-        .addReg(UG24::R11);
+        .addReg(UG24::R12);
     BuildMI(MBB, MI, DL, TII->get(UG24::MOVRAX)).addReg(UG24::DPTR0);
     BuildMI(MBB, MI, DL, TII->get(UG24::PUSH)).addReg(Hi);
     BuildMI(MBB, MI, DL, TII->get(UG24::PUSH)).addReg(Lo);

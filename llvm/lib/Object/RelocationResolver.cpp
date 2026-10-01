@@ -182,9 +182,9 @@ static uint64_t resolveMSP430(uint64_t Type, uint64_t Offset, uint64_t S,
 // generic consumer such as llvm-dwarfdump is ever asked to relocate.
 static bool supportsUG24(uint64_t Type) {
   switch (Type) {
-  case ELF::R_UG24_8:
-  case ELF::R_UG24_16:
-  case ELF::R_UG24_32:
+  case ELF::R_UG2408_8:
+  case ELF::R_UG2408_16:
+  case ELF::R_UG2408_32:
     return true;
   default:
     return false;
@@ -194,11 +194,11 @@ static bool supportsUG24(uint64_t Type) {
 static uint64_t resolveUG24(uint64_t Type, uint64_t Offset, uint64_t S,
                             uint64_t /*LocData*/, int64_t Addend) {
   switch (Type) {
-  case ELF::R_UG24_8:
+  case ELF::R_UG2408_8:
     return (S + Addend) & 0xFF;
-  case ELF::R_UG24_16:
+  case ELF::R_UG2408_16:
     return (S + Addend) & 0xFFFF;
-  case ELF::R_UG24_32:
+  case ELF::R_UG2408_32:
     return (S + Addend) & 0xFFFFFFFF;
   default:
     llvm_unreachable("Invalid relocation type");

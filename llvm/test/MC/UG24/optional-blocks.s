@@ -1,5 +1,5 @@
-; RUN: llvm-mc -triple=ug24-unknown-none-eabi -show-encoding %s | FileCheck %s
-; RUN: not llvm-mc -triple=ug24-unknown-none-eabi -mattr=-mul,-div -filetype=obj \
+; RUN: llvm-mc -triple=ug24-unknown-elf -show-encoding %s | FileCheck %s
+; RUN: not llvm-mc -triple=ug24-unknown-elf -mattr=-mul,-div -filetype=obj \
 ; RUN:   %s -o /dev/null 2>&1 | FileCheck --check-prefix=BASE %s
 ;
 ; The multiplier and the divider are optional blocks in the SoC

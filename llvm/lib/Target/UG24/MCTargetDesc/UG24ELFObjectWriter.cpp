@@ -29,22 +29,22 @@ protected:
                         const MCFixup &Fixup, bool IsPCRel) const override {
     switch (Fixup.getTargetKind()) {
     case FK_Data_1:
-      return ELF::R_UG24_8;
+      return ELF::R_UG2408_8;
     case FK_Data_2:
-      return ELF::R_UG24_16;
+      return ELF::R_UG2408_16;
     case FK_Data_4:
-      return ELF::R_UG24_32;
+      return ELF::R_UG2408_32;
     case UG24::fixup_ug24_pcrel_10:
-      return ELF::R_UG24_PCREL10;
+      return ELF::R_UG2408_PCREL10;
     case UG24::fixup_ug24_abs_16:
-      return ELF::R_UG24_ABS16;
+      return ELF::R_UG2408_16;
     case UG24::fixup_ug24_lo8:
-      return ELF::R_UG24_LO8;
+      return ELF::R_UG2408_LO8;
     case UG24::fixup_ug24_hi8:
-      return ELF::R_UG24_HI8;
+      return ELF::R_UG2408_HI8;
     default:
       Ctx.reportError(Fixup.getLoc(), "unsupported relocation type");
-      return ELF::R_UG24_NONE;
+      return ELF::R_UG2408_NONE;
     }
   }
 };

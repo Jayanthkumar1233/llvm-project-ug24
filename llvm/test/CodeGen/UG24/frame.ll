@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=ug24-unknown-none-eabi < %s | FileCheck %s
+; RUN: llc -mtriple=ug24-unknown-elf < %s | FileCheck %s
 
 declare void @callee(ptr)
 

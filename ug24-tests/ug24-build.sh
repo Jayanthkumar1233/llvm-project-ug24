@@ -30,7 +30,7 @@ CLANG="$BIN/clang"
 
 
 OBJDUMP="$BIN/llvm-objdump"
-TRIPLE=ug24-unknown-none-eabi
+TRIPLE=ug24-unknown-elf
 OPT=${OPT:--Os}
 
 SRC=$1

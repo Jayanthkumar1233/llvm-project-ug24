@@ -323,7 +323,7 @@ enum {
 
   // Unofficial, vendor-allocated machine number for the uG24 8-bit
   // microprocessor.  Not registered with the generic ELF ABI.
-  EM_UG24 = 0x9240,
+  EM_UG24 = 0xBA51,
 };
 
 // Object file classes.

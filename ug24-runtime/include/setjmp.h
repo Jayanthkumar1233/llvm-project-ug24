@@ -1,8 +1,8 @@
 //===-- setjmp.h - Non-local jumps for the uG24 ---------------------------===//
 //
-// The buffer holds the five callee-saved registers, the stack pointer and the
-// return address: nine bytes, rounded up to ten.  See ug24-runtime/
-// ug24_setjmp.s for the layout.
+// The buffer holds the six callee-saved registers R6-R11, the stack pointer and
+// the return address: ten bytes exactly.  See ug24-runtime/ug24_setjmp.s for
+// the layout.
 //
 //===----------------------------------------------------------------------===//
 

@@ -233,7 +233,7 @@ static uint16_t data_base(Core *c) {
 // ELF loading
 //===----------------------------------------------------------------------===//
 
-#define EM_UG24 0x9240
+#define EM_UG24 0xBA51u   // confirmed by the hardware team
 
 // One symbol from the image's symbol table, against the peripheral map.  The
 // names are the linker-script assignments in ug24-runtime/ug24.ld.

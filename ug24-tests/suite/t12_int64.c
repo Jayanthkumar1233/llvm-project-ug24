@@ -24,6 +24,16 @@ static void show(const char *what, unsigned long long value) {
            (unsigned long)(value & 0xffffffffULL));
 }
 
+#ifdef __ug24__
+/* ROM on the confirmed part is 32 KB, and this program plus printf's float
+ * formatter is a few hundred bytes over it at -O0.  It prints no floating
+ * point at all, so it opts the formatter out the documented way -- define the
+ * symbol and the archive member is never extracted.  A real program on a 32 KB
+ * part makes exactly this choice; see docs/uG24-assumptions.md. */
+int __ug24_format_float(char *out, unsigned long bits, int precision, char conv)
+{ (void)bits; (void)precision; (void)conv; out[0] = '?'; return 1; }
+#endif
+
 int main(void) {
     unsigned long long a = 0x0123456789abcdefULL;
     unsigned long long b = 0xfedcba9876543210ULL;

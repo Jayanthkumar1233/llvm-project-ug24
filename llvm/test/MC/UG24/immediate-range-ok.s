@@ -1,4 +1,4 @@
-; RUN: llvm-mc -triple=ug24-unknown-none-eabi -filetype=obj %s -o /dev/null
+; RUN: llvm-mc -triple=ug24-unknown-elf -filetype=obj %s -o /dev/null
 ;
 ; The other side of MC/UG24/immediate-range.s: everything at the edge of its
 ; range still assembles, and a symbolic expression is not range-checked in the

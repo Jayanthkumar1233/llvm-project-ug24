@@ -336,7 +336,7 @@
 <div class="wrap">
 
   <header class="masthead">
-    <p class="eyebrow">LLVM 17.0.6 · ug24-unknown-none-eabi</p>
+    <p class="eyebrow">LLVM 17.0.6 · ug24-unknown-elf</p>
     <h1>uG24 Toolchain Handbook</h1>
     <p class="standfirst">
       How a complete C cross-compiler, assembler, linker, runtime and simulator
@@ -705,7 +705,7 @@ int main(void) {
         <h4>Compile, link and run</h4>
         <div class="cmd">
           <div class="cmd-label">shell</div>
-<pre>~/llvm-arm-cross/build-ug24/bin/clang <span class="k">--target</span>=ug24-unknown-none-eabi -Os hello.c -o hello.elf
+<pre>~/llvm-arm-cross/build-ug24/bin/clang <span class="k">--target</span>=ug24-unknown-elf -Os hello.c -o hello.elf
 ~/llvm-arm-cross/ug24-sim/ug24sim hello.elf <span class="k">--quiet</span>
 
 <span class="o">Hello ug24</span></pre>
@@ -809,10 +809,10 @@ return value: r0=230  w=14
         <div class="cmd">
           <div class="cmd-label">shell</div>
 <pre><span class="p"># assembly, before assembling</span>
-clang <span class="k">--target</span>=ug24-unknown-none-eabi -Os -S hello.c -o -
+clang <span class="k">--target</span>=ug24-unknown-elf -Os -S hello.c -o -
 
 <span class="p"># disassembly of the linked image</span>
-llvm-objdump -d <span class="k">--triple</span>=ug24-unknown-none-eabi hello.elf
+llvm-objdump -d <span class="k">--triple</span>=ug24-unknown-elf hello.elf
 
 <span class="p"># headers, sections and relocations</span>
 llvm-readobj <span class="k">--file-headers</span> <span class="k">--relocations</span> hello.o</pre>
@@ -972,8 +972,8 @@ build-ug24/bin/llvm-lit -sv llvm-project/llvm/test/MC/UG24 llvm-project/llvm/tes
       </section>
 
       <footer>
-        Built on LLVM 17.0.6 · target triple <code>ug24-unknown-none-eabi</code> ·
-        ELF machine <code>0x9240</code>. Companion documents:
+        Built on LLVM 17.0.6 · target triple <code>ug24-unknown-elf</code> ·
+        ELF machine <code>0xBA51</code>. Companion documents:
         <code>docs/uG24-machine-description.md</code> for the full instruction
         encodings, <code>docs/uG24-assumptions.md</code> for the reasoning behind
         every decision above.

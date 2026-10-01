@@ -39,7 +39,7 @@ cat <<DONE
 
 uG24 toolchain ready.
 
-  compile and link   $BUILD_DIR/bin/clang --target=ug24-unknown-none-eabi -Os hello.c -o hello.elf
+  compile and link   $BUILD_DIR/bin/clang --target=ug24-unknown-elf -Os hello.c -o hello.elf
   run                ug24-sim/ug24sim hello.elf --quiet
   all build stages   ug24-tests/ug24-build.sh hello.c
 DONE

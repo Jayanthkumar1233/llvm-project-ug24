@@ -1,16 +1,36 @@
-; RUN: llc -mtriple=ug24-unknown-none-eabi < %s | FileCheck %s
+; RUN: llc -mtriple=ug24-unknown-elf < %s | FileCheck %s
 ;
 ; Every even-aligned register pair can hold a 16-bit value, not just the three
-; the instruction set names for its extended-register field.  With only those
-; three, code like this would spill.
+; the instruction set names for its extended-register field.
 
-define i16 @four_live_values(i16 %a, i16 %b, i16 %c, i16 %d) {
-; CHECK-LABEL: four_live_values:
+; Three live 16-bit values fit in the caller-saved pairs P0-P2, so a leaf
+; function this size touches the stack not at all.
+define i16 @three_live_values(i16 %a, i16 %b) {
+; CHECK-LABEL: three_live_values:
 ; CHECK-NOT: Folded Spill
-  %x = add i16 %a, %b
-  %y = add i16 %c, %d
-  %z = xor i16 %x, %y
-  ret i16 %z
+; CHECK-NOT: push
+  %p = add i16 %a, 1
+  %t = add i16 %p, %b
+  ret i16 %t
+}
+
+; Four live values need a fourth pair, and the ABI leaves only three
+; caller-saved ones (R0-R5), so the allocator borrows a callee-saved pair and
+; gives it back.  What this checks is that it *can*: P3 = R6:R7 is allocatable,
+; which is the whole point of declaring all eight pairs rather than the three
+; the extended-register field can name.  The values are computed rather than
+; passed, because only four bytes of arguments arrive in registers.
+define i16 @four_live_values(i16 %a, i16 %b) {
+; CHECK-LABEL: four_live_values:
+; CHECK: r6
+  %p = add i16 %a, 1
+  %q = add i16 %b, 2
+  %r = xor i16 %a, 3
+  %s = xor i16 %b, 4
+  %t = add i16 %p, %q
+  %u = add i16 %r, %s
+  %v = xor i16 %t, %u
+  ret i16 %v
 }
 
 ; A 16-bit branch compares the two halves directly rather than materialising a

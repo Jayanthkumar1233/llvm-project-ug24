@@ -15,20 +15,23 @@ using namespace clang::CodeGen;
 //===----------------------------------------------------------------------===//
 // uG24 ABI Implementation
 //
-// The uG24 specification defines no C ABI, so this is the one written down in
-// docs/uG24-assumptions.md, spelled out here rather than inherited from
-// DefaultABIInfo so that a second implementation has something to match.
+// The ABI confirmed by the hardware team, spelled out here rather than
+// inherited from DefaultABIInfo so that a second implementation has something
+// to match.  See docs/uG24-assumptions.md.
 //
 //   * void, and an empty struct, are returned in nothing at all.
-//   * A scalar of 32 bits or fewer is returned in registers: W, then DPTR1.
-//     A 64-bit scalar uses P0 and P1 as well -- see RetCC_UG24.
-//   * Every other type, aggregates included, is returned through a hidden
-//     pointer passed by the caller.  The uG24 has four 16-bit register pairs
-//     available to a return value and no way for one to spill, so anything
-//     larger has to go through memory.
-//   * An argument of 32 bits or fewer is passed in registers where any are
-//     left and on the stack otherwise; an aggregate is always passed by
-//     reference, with the caller owning the copy.
+//   * A scalar of 32 bits or fewer is returned in registers: R0 for a byte,
+//     X0 (R0:R1) for 16 bits, X0:X1 (R0:R3) for 32 -- see RetCC_UG24.
+//   * Everything wider, aggregates included, is returned through a hidden
+//     pointer the caller passes in R0:R1.  Four bytes is all the ABI gives a
+//     return value, and a return value has nowhere to spill, so a `long long`
+//     goes through memory exactly as a large struct does.  The confirmed
+//     answers stop at 32 bits and name the hidden pointer only for structs;
+//     applying the same rule to a wider scalar is the one reading that keeps
+//     both consistent.
+//   * An argument of 32 bits or fewer is passed in R0-R3 where room is left
+//     and on the stack otherwise; an aggregate is always passed by reference,
+//     with the caller owning the copy.
 //   * A narrow integer is promoted to int, as C requires, so that a callee
 //     compiled from a prototype-less declaration agrees with its caller.
 //
@@ -38,12 +41,14 @@ using namespace clang::CodeGen;
 
 namespace {
 
-/// Widest scalar that comes back in registers, in bits.  Four 16-bit pairs.
-static constexpr uint64_t MaxDirectReturnBits = 64;
+/// Widest scalar that comes back in registers, in bits: X0:X1, four bytes.
+/// Anything wider gets a hidden pointer.
+static constexpr uint64_t MaxDirectReturnBits = 32;
 
-/// Widest scalar passed in registers before the stack takes over.  The
-/// calling convention spills on its own, so this only bounds what is passed
-/// by value rather than by reference.
+/// Widest scalar passed by value before it goes by reference.  Larger than the
+/// four bytes the argument registers hold, because the calling convention
+/// continues on the stack by itself and copying a `long long` through memory at
+/// every call site would cost more than letting it split.
 static constexpr uint64_t MaxDirectArgumentBits = 64;
 
 class UG24ABIInfo : public ABIInfo {
@@ -77,8 +82,8 @@ ABIArgInfo UG24ABIInfo::classifyReturnType(QualType RetTy) const {
     return getNaturalAlignIndirect(RetTy);
   }
 
-  // _Complex float is two 32-bit halves, which is wider than the return
-  // registers hold once anything else is in them; treat it like an aggregate.
+  // _Complex float is two 32-bit halves, twice what the return registers hold;
+  // treat it like an aggregate.
   if (RetTy->isAnyComplexType() &&
       getContext().getTypeSize(RetTy) > MaxDirectReturnBits)
     return getNaturalAlignIndirect(RetTy);

@@ -38,7 +38,7 @@ SRC=$1
 shift
 
 ELF=${SRC%.c}.elf
-"$BIN/clang" --target=ug24-unknown-none-eabi $OPT "$SRC" -o "$ELF"
+"$BIN/clang" --target=ug24-unknown-elf $OPT "$SRC" -o "$ELF"
 
 # The simulator writes its memory image into the current directory, so run it
 # from wherever the executable landed.

@@ -31,6 +31,27 @@ image on a correct simulator retires exactly the same number, so a count that
 differs by more than a rounding of how you count `WFI` is a real divergence and
 worth chasing even when the output matches.
 
+## If you have run an earlier kit: two things changed on 1 October 2026
+
+The hardware team confirmed the ABI and the ELF identity, so **images built
+before and after that date are not interchangeable**.
+
+1. **`e_machine` was `0x9240` and is now `0xBA51`.** A simulator that checks it
+   will reject or warn about every file in this kit until that constant is
+   updated. The relocation names and numbers changed with it: 0 `R_UG2408_NONE`,
+   1 `R_UG2408_16`, 2 `R_UG2408_PCREL10`, 3 `R_UG2408_8`, 4 `R_UG2408_LO8`,
+   5 `R_UG2408_HI8`, 6 `R_UG2408_32`. A loader of executables never sees these.
+2. **The memory map is now split: ROM `0x0000`-`0x7FFF`, RAM `0x8000`-`0xFEFF`.**
+   So `.data` has a load address in ROM and a run address in RAM, and `crt0`
+   copies it before `main`. **A loader that ignores `p_paddr` stops working
+   here**, silently and only for initialised variables. It was getting away with
+   it while the map was one flat region. `04_memory` is the program that catches
+   it.
+
+The register-level ABI changed too — arguments in `R0`-`R3`, returns in `R0`,
+`X0` or `X0:X1`, callee-saved `R6`-`R11` — but none of that is visible to a
+simulator. It only matters if you are writing uG24 assembly by hand.
+
 ## Read the console address out of the ELF, do not guess it
 
 The uG24 core contains no UART, so neither the ISA specification nor the
@@ -61,6 +82,7 @@ ISA documents do not cover. Read it before anything else.
    register instead.
 4. **Sizes are not the host's.** `int` is 16 bits, `long` 32, `long long` 64,
    pointers 16, and `double` is IEEE **single** precision, 32 bits, like AVR.
+   All of those are confirmed by the hardware team except `double`.
    That last one is why `05_float` prints `355 / 113 = 3.141593` and stops
    there: a host printing `3.14159292` is using a 64-bit double and is not
    disagreeing.

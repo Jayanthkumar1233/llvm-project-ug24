@@ -81,7 +81,7 @@ void UG24FrameLowering::determineCalleeSaves(MachineFunction &MF,
   // whenever the function makes a call, which is the only way RA is written.
   bool SavesEverything = MF.getFrameInfo().hasCalls();
 
-  // R11 and DPTR0 are reserved, so the generic callee-saved machinery would
+  // DPTR1 and DPTR0 are reserved, so the generic callee-saved machinery would
   // never consider them, yet the expansion temporary and the memory base
   // register are exactly what a handler is most likely to overwrite.
   for (MCRegister Reg : UG24::GPRRegClass)

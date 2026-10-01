@@ -43,7 +43,7 @@ for SRC in "$DIR"/${1:-*}.c; do
         # no C construct can reach.
         ASM=""
         [ -f "$DIR/$NAME.s" ] && ASM="$DIR/$NAME.s"
-        if ! "$BIN/clang" --target=ug24-unknown-none-eabi $OPT "$SRC" $ASM \
+        if ! "$BIN/clang" --target=ug24-unknown-elf $OPT "$SRC" $ASM \
                 -o "$WORK/$NAME.elf" > "$WORK/build.log" 2>&1; then
             printf ' %s:BUILD' "$OPT"; FAIL=$((FAIL+1)); continue
         fi

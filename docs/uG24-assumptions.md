@@ -1,74 +1,138 @@
 # uG24 Compiler Design Assumptions & Spec Discrepancies
 
 **Target processor:** uG24 (uG24081616uP / uG24xx1616uP) 8-bit microprocessor
-**Sources:** `uG24081616uP_spec.pdf` (Rev 0.1), `Copy of uG24xx1616uP_ISA.xlsx`
+**Sources:** `uG24081616uP_spec.pdf` (Rev 0.1), `Copy of uG24xx1616uP_ISA.xlsx`,
+and `uG24_questions&Ans.docx` — the hardware team's confirmed answers, received
+1 October 2026.
 
-Everything below is a decision the compiler had to make because the source
+Everything below was a decision the compiler had to make because the source
 documents do not specify it, or specify it ambiguously. Each one is
-implemented in exactly one place so it is cheap to change once the hardware
-team confirms the intended behaviour.
+implemented in exactly one place, which is what made the confirmed answers
+cheap to adopt. Sections now marked **confirmed** are no longer ours to change;
+what is left unmarked is still an assumption.
+
+### What the confirmed answers changed
+
+Of the ten hardware answers, eight confirmed what was already implemented: the
+byte order of `PUSH RA` and of instruction fetch, `R14` as the low byte of
+`DPTR0`, `JA` taking a byte address, the full-descending stack, the branch
+displacement counted in instruction words with `i10 = -1` for a self-branch,
+and the type sizes and alignments.
+
+The ABI answers did not. The argument and return registers, the caller- and
+callee-saved split, the reserved registers, the variadic rule, the ELF machine
+number, the relocation numbering and the memory map all moved. Two of those
+changes exposed real bugs that the old arrangement had been hiding:
+
+* **The soft-float comparison helpers returned the wrong width.** LLVM's
+  default for `__ltsf2` and friends is a 32-bit result, while the runtime
+  returns C `int`, which is 16 bits here. The caller was testing the sign of a
+  register pair the callee never wrote. It passed before by luck;
+  `getCmpLibcallReturnType` now says `i16`, as AVR's and MSP430's do.
+* **`setjmp` saved the wrong registers.** Its buffer held `R4`-`R7` and `R10`,
+  the old callee-saved set. It now holds `R6`-`R11`.
 
 ---
 
 ## 1. Target triple and binary format
 
-| Parameter | Choice | Where it lives |
+**Confirmed**, except for the floating-point formats.
+
+| Parameter | Value | Where it lives |
 | :--- | :--- | :--- |
-| Target triple | `ug24-unknown-none-eabi` | `llvm/lib/TargetParser/Triple.cpp` |
-| Data layout | `e-m:e-p:16:16-i8:8-i16:8-a:8-n8:16-S8` | `UG24TargetMachine.cpp`, `clang/lib/Basic/Targets/UG24.h` |
-| ELF machine number | `EM_UG24 = 0x9240` | `llvm/include/llvm/BinaryFormat/ELF.h` |
+| Target triple | `ug24-unknown-elf` | `llvm/lib/TargetParser/Triple.cpp` |
+| Data layout | `e-m:e-p:16:8-i8:8-i16:8-i32:8-i64:8-f32:8-f64:8-a:8-n8:16-S8` | `UG24TargetMachine.cpp`, `clang/lib/Basic/Targets/UG24.h` |
+| ELF machine number | `EM_UG24 = 0xBA51` | `llvm/include/llvm/BinaryFormat/ELF.h` |
 | C types | `char` 8, `short` 16, `int` 16, `long` 32, `long long` 64, pointer 16 | `clang/lib/Basic/Targets/UG24.h` |
-| Alignment | Everything byte aligned; the hardware has no alignment requirement | same |
+| Alignment | Data byte-aligned, code 2-byte aligned | same |
 | `float`/`double` | Both 32-bit IEEE single; emulated in software | same |
 
-`EM_UG24` is **not** registered with the generic ELF ABI. It is a private
-number chosen so that uG24 objects are distinguishable; if the project ever
-needs interoperability with third-party tools, this is the value to
-renegotiate.
+`0xBA51` is the number the hardware team chose, from the two they offered. The
+other was 250 (`0x00FA`), which was not taken because values up to about 250 are
+assigned by the generic ELF registry, so a stock `readelf` could one day report
+a uG24 object as some unrelated architecture. `0xBA51` is outside that range and
+cannot collide. It is still not registered: anyone reading these objects has to
+be told, which is what `docs/uG24-platform.md` is for.
+
+**`float` and `double` are the one part of this table the answers do not
+cover.** `double` being IEEE single, like AVR's, is still ours.
 
 ---
 
 ## 2. C ABI
 
-The specification defines the register file and the `LJR`/`LJA`/`RET`
-instructions but no C ABI, so this one is invented.
+**Confirmed.** The specification defines the register file and the
+`LJR`/`LJA`/`RET` instructions but no C ABI; the answers supply one.
 
 ### Argument passing
-- 8-bit arguments: `R0`, `R1`, `R2`, `R3`, then the stack.
-- 16-bit arguments and pointers: `W` (`R9:R8`), then `DPTR1` (`R13:R12`),
-  then the stack.
+- `R0`, `R1`, `R2`, `R3` — four bytes in all, and everything past them on the
+  stack.
+- A 16-bit argument or pointer occupies a pair: `X0` = `R1:R0`, then
+  `X1` = `R3:R2`.
+- The pairs are even-aligned, because that is what the pair registers can
+  express. A `char` followed by an `int` therefore lands in `R0` and then
+  `R3:R2`, leaving `R1` unused. The answers do not say whether byte arguments
+  pack, so this is the one detail of argument passing still ours.
+- A value wider than four bytes is legalised into 16-bit pieces, so it can
+  start in the pairs and continue on the stack.
 - Stack arguments are written by the caller into a reserved area at the bottom
   of its own frame, so the callee finds argument *k* at `SP_incoming + offset`.
 
 ### Return values
-- 8-bit values in `R0`.
-- 16-bit values in `W`.
-- 32-bit values in `W` and `DPTR1`, 64-bit values in `W`, `DPTR1`, `P0` and
-  `P1`. A return value has nowhere to spill to, so four pairs is the limit;
-  anything wider, and every aggregate, is returned through a hidden pointer
-  the caller passes as a first argument.
-- Aggregate arguments are passed by reference, with the caller owning the
+- 8 bits in `R0`.
+- 16 bits in `X0` (`R1:R0`).
+- 32 bits in `X0:X1` (`R0`-`R3`).
+- **Anything wider, and every aggregate, through a hidden pointer** the caller
+  passes in `R0:R1`. The answers name the hidden pointer for structures over
+  four bytes and stop at 32 bits for scalars; applying the same rule to a
+  `long long` is the one reading that keeps the two consistent, and a return
+  value has nowhere to spill in any case.
+- Aggregate *arguments* are passed by reference, with the caller owning the
   copy. The uG24 has no block move, so pushing a struct a byte at a time at
   every call site costs more code than the copy the callee would have made.
 
-`clang/lib/CodeGen/Targets/UG24.cpp` is where this is written down on the
-Clang side; `UG24CallingConv.td` assigns the registers on the backend side.
+`clang/lib/CodeGen/Targets/UG24.cpp` decides direct against indirect;
+`UG24CallingConv.td` assigns the registers.
 
 Clang's generic code would otherwise widen an `i8` return to the register type
 of `i32`, which on this target is `i16`; `UG24TargetLowering::getTypeForExtReturn`
 overrides that so definitions and call sites agree.
 
+### Variadic arguments
+Fixed arguments go in `R0`-`R3` as usual; the variadic ones always go on the
+stack even when a register is free. The callee knows only its declared
+parameters, so this is the one arrangement in which both sides agree on where
+the variadic block begins — immediately after the fixed arguments, as one
+contiguous run that `va_arg` can walk.
+
+Whether an argument is variadic is a property of the argument rather than of
+the call, and a TableGen predicate cannot see it, so `UG24TargetLowering::
+LowerCall` analyses the arguments one at a time and sends the variadic ones
+through `CC_UG24_VarArg`.
+
 ### Register roles
-- **Caller-saved:** `R0`–`R3`, `R8`, `R9` (`W`), `R12`, `R13` (`DPTR1`), `RA`.
-- **Callee-saved:** `R4`, `R5`, `R6`, `R7`, `R10`.
+- **Caller-saved:** `R0`-`R5`, and `RA`.
+- **Callee-saved:** `R6`-`R11`.
 - **Reserved, never allocated:**
-  - `R11` — expansion temporary. `ADC`/`SBB` take a register, so 16-bit
-    arithmetic against a constant needs somewhere to put the high byte.
-    The pair `P5` (`R11:R10`) is reserved along with it.
+  - `R13:R12` (`DPTR1`) — reserved by the ABI. With `PSW.DP` kept clear it is
+    not the base register the hardware selects, so the backend uses `R12` as
+    the scratch byte that `ADC`/`SBB` need to hold the high half of a 16-bit
+    constant, and `DPTR1` as the scratch pair for moving a special function
+    register. If `DPTR1` is ever wanted as a second live base pointer, that is
+    the thing to revisit.
   - `R15:R14` (`DPTR0`) — the base address register. `LD` and `ST` take their
     base from `DPTR0` (when `PSW.DP` is clear) rather than from an encoded
     operand, so dedicating the pair avoids shuffling a pointer into place
     around every memory access.
+  - `PC`, `RA`, `PSW`, `SP`.
+
+Reserving `DPTR1` bought back `R11`, which used to be the scratch byte and cost
+the whole `P5` pair with it. All six ordinary pairs — `P0` to `P5` — are
+allocatable now, which is more 16-bit registers than the previous arrangement
+had, not fewer. What did shrink is the caller-saved half: three pairs where
+there were four, so a function with four live 16-bit values borrows a
+callee-saved pair and gives it back.
+
 - **Frame pointer:** `P3` (`R7:R6`), and only in a function that needs one —
   one with a variable-length array, an `alloca`, or a taken frame address.
   Everything else addresses its frame from `SP` and leaves `P3` to the
@@ -77,11 +141,39 @@ overrides that so definitions and call sites agree.
   allocated, so that every frame offset is a non-negative displacement: `LD`
   and `ST` have no signed form.
 
+### Stack layout
+Full descending, `SP` pointing at the last occupied byte, in this order from
+the caller's end: incoming arguments, saved `RA`, saved frame pointer where
+there is one, the callee-saved registers, locals and spills, and outgoing
+arguments at `SP`.
+
 ### Return address
 `RA` is a single register with no hardware stack, so a function that makes any
 call must preserve it. The prologue of a non-leaf function does `PUSH RA` and
 the epilogue does `POP RA`. Incoming stack arguments therefore sit two bytes
 above the frame, which `UG24RegisterInfo::eliminateFrameIndex` accounts for.
+
+### Relocations
+**Confirmed**, with one addition.
+
+| Number | Name | Meaning |
+| ---: | :--- | :--- |
+| 0 | `R_UG2408_NONE` | no-op |
+| 1 | `R_UG2408_16` | `write16le(S + A)` — a 16-bit datum, and the second halfword of a `JA`/`LJA`, which are the same operation |
+| 2 | `R_UG2408_PCREL10` | signed 10-bit instruction-word displacement in `Inst{15-6}` |
+| 3 | `R_UG2408_8` | `write8(S + A)` |
+| 4 | `R_UG2408_LO8` | `write8((S + A) & 0xFF)` |
+| 5 | `R_UG2408_HI8` | `write8(((S + A) >> 8) & 0xFF)` |
+| 6 | `R_UG2408_32` | **local extension:** a 32-bit datum, which `.long symbol` needs and nothing in the confirmed set can express |
+
+The confirmed note for `PCREL10` gives `Offset = S + A - P + 1`, which does not
+agree with the same document's answer that a self-branch needs `i10 = -1`:
+with `S + A = P` that formula yields `+1`. The hardware behaviour
+`PC <- PC + 1 + i10` makes the displacement `target - P - 1` in instruction
+words, which is what the assembler and the linker both implement and what the
+spreadsheet's branch encodings verify. **Worth confirming with the hardware
+team which of their two statements they meant**; the code follows the prose, not
+the formula.
 
 ---
 
@@ -107,7 +199,7 @@ assigned and `XORI` has one of them:
 different field layout from the rest of Format I: the register is in
 `Inst{15-12}` and the immediate in `Inst{11-4}`.
 
-### 3.2 Branch displacement units
+### 3.2 Branch displacement units — **confirmed**
 The spec writes branches as `PC <- PC + 1 + (cond ? i10 : 0)` and `LJA` as
 `RA <- PC + 2`, while stating that instructions are 2 bytes and `JA`/`LJA` are
 4. Both are only consistent if `+1` means *one instruction word*.
@@ -138,14 +230,24 @@ unsigned ordering, which produces the signed answer either way. So if the
 hardware turns out to compare signed, only the sign-flip becomes redundant —
 nothing becomes wrong. See `translateCC` in `UG24ISelLowering.cpp`.
 
-### 3.4 `PUSH` / `POP` direction
+### 3.4 `PUSH` / `POP` direction — **confirmed**
 The spec writes `PUSH: Rs -> [SP]` then `SP <- SP - 1`, and
 `POP: Rd <- [SP]` then `SP <- SP + 1`. As written these are not inverses — a
 push followed by a pop would read the wrong byte.
 
-**Assumption:** the stack is full-descending, i.e. `PUSH` decrements then
-stores and `POP` loads then increments, so that `SP` always points at the most
-recently pushed byte. Multi-byte pushes store little-endian.
+**Assumption, since confirmed:** the stack is full-descending, i.e. `PUSH`
+decrements then stores and `POP` loads then increments, so that `SP` always
+points at the most recently pushed byte. Multi-byte pushes store little-endian.
+
+The confirmed answers say "Compiler ABI: Configured as Pre-decrement (Full
+Descending), where `SP` points to the last occupied byte", and their worked
+example for `PUSH RA` agrees exactly: the low byte of `RA` lands at `SP-2`, the
+high byte at `SP-1`, and the new `SP` points at the low byte. The same answer
+also describes the hardware as post-decrement on `PUSH` and post-increment on
+`POP`, which is not a working stack — a push followed by a pop would read a byte
+that was never written — so it is read as a slip, contradicted by the example
+beside it. **Worth confirming**, but nothing in the implementation changes
+either way: it already does what the example shows.
 
 ### 3.5 Extended register encoding width
 `W`, `DPTR1` and `DPTR0` appear as `100_0`, `110_0`, `111_0` in some tables
@@ -386,11 +488,38 @@ relies on.
 
 ## 5. Memory map
 
-The reset `PC` and `SP` are strapped inputs on real hardware, and the
-instruction/data TCM sizes are per-SoC parameters. `ug24-runtime/ug24.ld`
-therefore lays out one flat 64 KB image — text from address 0, then rodata,
-data and bss, with the stack growing down from `0xFFFE`. Adjust the `MEMORY`
-block to match the part being targeted.
+**Confirmed**, apart from the peripheral page.
+
+| Region | Range | Holds |
+| :--- | :--- | :--- |
+| ROM / Flash | `0x0000`-`0x7FFF` | the vector table, `.text`, `.rodata` |
+| RAM / SRAM | `0x8000`-`0xFEFF` | `.data`, `.bss`, the heap, the stack |
+| Peripherals | `0xFF00`-`0xFFFF` | **assumed**; query G5 |
+
+The confirmed answer gives RAM as `0x8000`-`0xFFFF` with the stack top at
+`0xFFFF`, which leaves the memory-mapped console nowhere to live. Query G5 — the
+peripheral map — is still unanswered, so the top page is held out of RAM as
+before and `__stack_top` is `0xFEFE`. Every peripheral address is published as a
+symbol in each image, so when G5 is answered only `ug24-runtime/ug24.ld`
+changes; see [uG24-platform.md](uG24-platform.md).
+
+Two consequences worth knowing:
+
+**`.data` now has a load address distinct from its run address** — the initial
+contents travel in ROM next to `.text`, and `crt0` copies them into RAM before
+`main`. The copy loop was a no-op while the map was one flat region. A loader
+that goes by section name rather than by `p_paddr` prints garbage from an
+initialised variable and nothing else wrong, which is why the cross-check kit
+has a program for exactly that.
+
+**32 KB of ROM is a real ceiling.** With both printf formatters linked by
+default, the two largest programs in the acceptance suite came within a few
+hundred bytes of it, and at some optimisation levels went over:
+`t13_float` reached 32,904 bytes at `-O2` against a 32,768-byte region. Each now
+opts out of the formatter it does not use — the documented one-line definition —
+which is the choice a real program on a 32 KB part would make. It is also an
+argument for revisiting the default in §3.8: 4.7 KB of float formatter is 15% of
+this ROM, where it was 7% of the old flat 64 KB.
 
 ### The peripheral page is not derivable from the source documents
 

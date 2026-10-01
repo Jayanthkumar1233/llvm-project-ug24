@@ -1,5 +1,5 @@
-; RUN: llc -mtriple=ug24-unknown-none-eabi < %s | FileCheck %s
-; RUN: llc -mtriple=ug24-unknown-none-eabi -mcpu=ug24-base < %s \
+; RUN: llc -mtriple=ug24-unknown-elf < %s | FileCheck %s
+; RUN: llc -mtriple=ug24-unknown-elf -mcpu=ug24-base < %s \
 ; RUN:   | FileCheck --check-prefix=BASE %s
 ;
 ; The multiplier and the divider are optional blocks in the SoC

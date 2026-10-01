@@ -81,7 +81,7 @@ shift-and-add loops and need no hardware of their own. The runtime library
 does not have to be rebuilt to match.
 
 ```bash
-build-ug24/bin/clang --target=ug24-unknown-none-eabi -mcpu=ug24-base -Os hello.c -o hello.elf
+build-ug24/bin/clang --target=ug24-unknown-elf -mcpu=ug24-base -Os hello.c -o hello.elf
 ```
 
 ---
@@ -94,7 +94,7 @@ The clang driver knows the uG24 target, so one command compiles, links and
 produces a bare-metal ELF executable:
 
 ```bash
-build-ug24/bin/clang --target=ug24-unknown-none-eabi -Os hello.c -o hello.elf
+build-ug24/bin/clang --target=ug24-unknown-elf -Os hello.c -o hello.elf
 ```
 
 This pulls in `crt0.o`, `libug24.a` and the default linker script
@@ -105,19 +105,19 @@ This pulls in `crt0.o`, `libug24.a` and the default linker script
 Assembly only:
 
 ```bash
-build-ug24/bin/clang --target=ug24-unknown-none-eabi -Os -S hello.c -o hello.s
+build-ug24/bin/clang --target=ug24-unknown-elf -Os -S hello.c -o hello.s
 ```
 
 Object file only:
 
 ```bash
-build-ug24/bin/clang --target=ug24-unknown-none-eabi -Os -c hello.c -o hello.o
+build-ug24/bin/clang --target=ug24-unknown-elf -Os -c hello.c -o hello.o
 ```
 
 ### Assembling hand-written uG24 assembly
 
 ```bash
-build-ug24/bin/llvm-mc -triple=ug24-unknown-none-eabi -filetype=obj boot.s -o boot.o
+build-ug24/bin/llvm-mc -triple=ug24-unknown-elf -filetype=obj boot.s -o boot.o
 ```
 
 Add `-show-encoding` to see the machine code for each instruction.
@@ -132,7 +132,7 @@ build-ug24/bin/ld.lld -m elf32ug24 -T ug24-runtime/ug24.ld \
 ### Inspecting the result
 
 ```bash
-build-ug24/bin/llvm-objdump -d --triple=ug24-unknown-none-eabi hello.elf
+build-ug24/bin/llvm-objdump -d --triple=ug24-unknown-elf hello.elf
 ```
 
 ```bash
@@ -143,7 +143,8 @@ build-ug24/bin/llvm-readobj --file-headers --relocations hello.o
 
 ## 4. Running a program
 
-`ug24sim` loads the ELF into a flat 64 KB memory, seeds `SP` from the
+`ug24sim` loads the ELF into a flat 64 KB address space — 32 KB of ROM then
+32 KB of RAM, as the confirmed map has it — seeds `SP` from the
 `__stack_top` symbol in the image, and interprets from the ELF entry point
 until the core executes `WFI` with no interrupt left to wait for.
 
@@ -228,7 +229,7 @@ int main(void) {
 ```
 
 ```bash
-build-ug24/bin/clang --target=ug24-unknown-none-eabi -Os demo.c -o demo.elf && ug24-sim/ug24sim demo.elf --dump
+build-ug24/bin/clang --target=ug24-unknown-elf -Os demo.c -o demo.elf && ug24-sim/ug24sim demo.elf --dump
 ```
 
 The run reports `w=13` (the value of `buffer[7]`), and the dump contains

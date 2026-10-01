@@ -413,12 +413,12 @@ void UG24InstrInfo::addImmediate(MachineBasicBlock &MBB,
 
   // Operate on the low byte with flags, then propagate the carry (or borrow)
   // into the high byte.  ADC/SBB take a register, so the high byte of the
-  // constant is materialised in the reserved temporary R11 first.
+  // constant is materialised in the reserved temporary R12 first.
   BuildMI(MBB, MI, DL, get(IsSub ? UG24::SBI : UG24::ADI), Lo)
       .addReg(Lo)
       .addImm(LoByte);
-  BuildMI(MBB, MI, DL, get(UG24::MVI), UG24::R11).addImm(HiByte);
+  BuildMI(MBB, MI, DL, get(UG24::MVI), UG24::R12).addImm(HiByte);
   BuildMI(MBB, MI, DL, get(IsSub ? UG24::SBB : UG24::ADC), Hi)
       .addReg(Hi)
-      .addReg(UG24::R11);
+      .addReg(UG24::R12);
 }

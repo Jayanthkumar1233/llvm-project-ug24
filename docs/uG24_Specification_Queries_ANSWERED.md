@@ -7,7 +7,7 @@
 | **Sources checked** | `Copy of uG24xx1616uP_ISA.xlsx`; `uG24081616uP_spec.pdf` Rev 0.1 |
 | **Answer status** | 14 resolved from the specification · 17 answered by toolchain decision (need sign-off) · 20 still hardware-only · 3 query defects |
 | **Changed in Rev 5** | G5 no longer blocking — subtarget features added. F1–F4 implemented against an assumed model; the assumptions are now listed. **I3 has become blocking** — the indirect call added since Rev 4 depends on it. |
-| **Answered by** | Working LLVM 17 backend, assembler, linker, runtime and instruction-set simulator for `ug24-unknown-none-eabi` |
+| **Answered by** | Working LLVM 17 backend, assembler, linker, runtime and instruction-set simulator for `ug24-unknown-elf` |
 
 ---
 
@@ -607,7 +607,7 @@ or wait states programming, that has to come first.
 
 **ANSWER — CONFIRMED, and it matches what we built.**
 
-The backend targets `uG24081616uP` only, as `ug24-unknown-none-eabi`. Sixteen
+The backend targets `uG24081616uP` only, as `ug24-unknown-elf`. Sixteen
 8-bit GPRs with 16-bit values in pairs.
 
 Your remark that AVR rather than MSP430 is the right in-tree model is correct

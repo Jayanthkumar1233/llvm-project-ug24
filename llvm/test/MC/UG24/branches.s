@@ -1,5 +1,5 @@
-; RUN: llvm-mc -triple=ug24-unknown-none-eabi -filetype=obj %s -o %t.o
-; RUN: llvm-objdump -d --triple=ug24-unknown-none-eabi %t.o | FileCheck %s
+; RUN: llvm-mc -triple=ug24-unknown-elf -filetype=obj %s -o %t.o
+; RUN: llvm-objdump -d --triple=ug24-unknown-elf %t.o | FileCheck %s
 ; RUN: llvm-readobj --relocations %t.o | FileCheck --check-prefix=RELOC %s
 ;
 ; A conditional branch encodes a signed count of instruction words taken from
@@ -25,10 +25,10 @@ target:
 ; CHECK: mvi r1, 0
         mvi     r1, hi8(gvar)
 
-; RELOC: R_UG24_ABS16 extfunc
-; RELOC: R_UG24_ABS16 extfunc
-; RELOC: R_UG24_LO8 gvar
-; RELOC: R_UG24_HI8 gvar
+; RELOC: R_UG2408_16 extfunc
+; RELOC: R_UG2408_16 extfunc
+; RELOC: R_UG2408_LO8 gvar
+; RELOC: R_UG2408_HI8 gvar
 
         .data
         .globl  gvar

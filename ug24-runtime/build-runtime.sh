@@ -34,20 +34,20 @@ for SRC in ug24_builtins ug24_int64 ug24_float ug24_printf_float ug24_printf_u64
     # Without them the archive member is the unit of linking and one call to
     # printf drags in the whole formatter and the 32-bit arithmetic behind it:
     # 15102 bytes for "Hello ug24", against 234 with them.
-    "$BIN/clang" --target=ug24-unknown-none-eabi -Os -ffreestanding -fno-builtin \
+    "$BIN/clang" --target=ug24-unknown-elf -Os -ffreestanding -fno-builtin \
         -ffunction-sections -fdata-sections \
         -I "$ROOT/ug24-runtime/include" \
         -c "$ROOT/ug24-runtime/$SRC.c" -o "$TMP/$SRC.o"
 done
 # setjmp has to be assembly: a C function cannot see the return address the
 # call left in RA, nor the stack pointer its own prologue has already moved.
-"$BIN/llvm-mc" -triple=ug24-unknown-none-eabi -filetype=obj \
+"$BIN/llvm-mc" -triple=ug24-unknown-elf -filetype=obj \
     "$ROOT/ug24-runtime/ug24_setjmp.s" -o "$TMP/ug24_setjmp.o"
 
 # Weak absolute definitions of the peripheral map, for a program linked with
 # its own script instead of ug24.ld.  The stock script's assignments override
 # them, so with it this member is never extracted.
-"$BIN/llvm-mc" -triple=ug24-unknown-none-eabi -filetype=obj \
+"$BIN/llvm-mc" -triple=ug24-unknown-elf -filetype=obj \
     "$ROOT/ug24-runtime/ug24_platform.s" -o "$TMP/ug24_platform.o"
 
 "$BIN/llvm-ar" rcs "$OUT/libug24.a" "$TMP/ug24_builtins.o" \
@@ -56,7 +56,7 @@ done
     "$TMP/ug24_stdio.o" "$TMP/ug24_stdlib.o" "$TMP/ug24_setjmp.o" \
     "$TMP/ug24_platform.o"
 
-"$BIN/llvm-mc" -triple=ug24-unknown-none-eabi -filetype=obj \
+"$BIN/llvm-mc" -triple=ug24-unknown-elf -filetype=obj \
     "$ROOT/ug24-runtime/crt0.s" -o "$OUT/crt0.o"
 
 cp "$ROOT/ug24-runtime/ug24.ld" "$OUT/ug24.ld"

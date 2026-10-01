@@ -1,4 +1,4 @@
-; RUN: not llvm-mc -triple=ug24-unknown-none-eabi -filetype=obj %s -o /dev/null 2>&1 \
+; RUN: not llvm-mc -triple=ug24-unknown-elf -filetype=obj %s -o /dev/null 2>&1 \
 ; RUN:   | FileCheck %s
 ;
 ; Out-of-range immediates are diagnosed rather than truncated.  The compiler

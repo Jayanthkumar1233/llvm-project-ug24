@@ -27,7 +27,7 @@ BUILT=$(date -u +%Y-%m-%dT%H:%MZ)
 for SRC in "$DIR"/src/*.c; do
     NAME=$(basename "$SRC" .c)
     cp "$SRC" "$OUT/$NAME.c"
-    "$BIN/clang" --target=ug24-unknown-none-eabi -Os -Wall -Wextra \
+    "$BIN/clang" --target=ug24-unknown-elf -Os -Wall -Wextra \
         "$SRC" -o "$OUT/$NAME.elf"
     "$SIM" "$OUT/$NAME.elf" --quiet > "$OUT/$NAME.expected"
     # The instruction count is a second, independent check: the same image on a

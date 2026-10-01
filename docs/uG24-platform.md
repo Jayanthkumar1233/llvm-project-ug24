@@ -136,20 +136,39 @@ project conventions rather than vendor facts.
 
 | | Value | Where it comes from |
 | :--- | :--- | :--- |
-| `e_machine` | `0x9240` (`EM_UG24`) | chosen here; no registered number exists |
-| ELF class / endianness | ELF32, little-endian | `llvm/lib/Target/UG24` |
+| `e_machine` | **`0xBA51`** (`EM_UG24`) | chosen by the hardware team, 1 Oct 2026; not registered with the generic ELF ABI |
+| Target triple | `ug24-unknown-elf` | confirmed |
+| ELF class / endianness | ELF32, little-endian | confirmed |
 | Image base | `0x0000`, page size 1 | `lld/ELF/Arch/UG24.cpp` |
-| Address space | one flat 64 KB, code and data shared | the spec's single bus |
-| Entry | `e_entry`, which is `0x0000` for a stock image | `ENTRY(_start)` |
+| ROM | `0x0000`-`0x7FFF`, holding the vectors, `.text` and `.rodata` | confirmed |
+| RAM | `0x8000`-`0xFEFF`, holding `.data`, `.bss`, the heap and the stack | confirmed, less the peripheral page |
+| Entry | `e_entry`, **not always `0x0000`** | `ENTRY(_start)` |
 | Vector table | four slots at `0x0000`, one `LJA` each: reset, NMI, maskable, software | **assumption**, query A1/A6 |
 | Interrupt entry | hardware pushes PC then PSW; return is `POP PSW` + `POP PC` | **assumption**, query A1/A6 |
 | Reset `SP` | strapped on real hardware; the simulator seeds it from `__stack_top` | `ug24.ld`, and `crt0.s` loads it anyway |
 | Normal exit | `exit()` writes `SIM_EXIT`; a `main` that returns falls into `wfi` / `jr` | `crt0.s`, `ug24_stdlib.c` |
-| Stack window | `__heap_end` .. `__stack_top`, both in the symbol table | `ug24.ld` |
+| Stack window | `__heap_end` .. `__stack_top` (`0xFEFE`), both in the symbol table | `ug24.ld` |
+
+Relocation numbers, also confirmed: 0 `R_UG2408_NONE`, 1 `R_UG2408_16`,
+2 `R_UG2408_PCREL10`, 3 `R_UG2408_8`, 4 `R_UG2408_LO8`, 5 `R_UG2408_HI8`, and
+6 `R_UG2408_32` as a local extension for `.long symbol`. A loader of executables
+does not see these — the linker has already applied them — but anything reading
+relocatable objects does.
+
+### Two things that changed on 1 October 2026
+
+`e_machine` **was `0x9240`** and is now `0xBA51`. A simulator that checks it
+rejects or warns about every image built after that date until the constant is
+updated. The relocation names and numbers changed with it.
+
+The memory map **was one flat 64 KB** and is now split, so `.data` has a load
+address in ROM distinct from its run address in RAM. A loader that was getting
+away with ignoring `p_paddr` stops working at that point, silently and only for
+initialised variables.
 
 Read `e_entry` rather than assuming `0x0000`, and load by `p_paddr` from the
-program headers rather than by section — `.data` has a distinct load address
-whenever `MEM` is split into ROM and RAM.
+program headers rather than by section — with the confirmed ROM/RAM split,
+`.data`'s load and run addresses are now always different.
 
 A core that halts on `wfi` when no interrupt can arrive, and waits when one
 still can, matches `crt0`'s halt loop. Halting unconditionally also works for
@@ -164,9 +183,12 @@ The map in §2 is an assumption, recorded as one in
 1. **Share this file.** Enough for two implementations to agree today.
 2. **Read the symbols (§3).** No agreement needed at all, and survives the map
    moving. This is what `ug24sim` does.
-3. **Get query G5 answered.** When the hardware team says where the SoC decodes
-   its console, change the `MEMORY` block in `ug24-runtime/ug24.ld`, rebuild the
-   runtime, and every image and every loader that reads the symbols follows.
+3. **Get query G5 answered.** The 1 October 2026 answers confirmed the ROM/RAM
+   split but put RAM up to `0xFFFF` with the stack top there, which leaves the
+   console nowhere to live, so this is still open. When the hardware team says
+   where the SoC decodes its console, change the `MEMORY` block in
+   `ug24-runtime/ug24.ld`, rebuild the runtime, and every image and every loader
+   that reads the symbols follows.
    Nothing in the compiler changes: the code generator knows nothing about
    peripherals, which is deliberate and is checked by
    `ug24-tests/verify-against-isa-xlsx.py` plus the absence of any runtime

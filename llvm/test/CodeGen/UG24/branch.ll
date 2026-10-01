@@ -1,4 +1,4 @@
-; RUN: llc -mtriple=ug24-unknown-none-eabi < %s | FileCheck %s
+; RUN: llc -mtriple=ug24-unknown-elf < %s | FileCheck %s
 
 ; An 8-bit comparison is a CMP followed by the matching conditional branch.
 define i8 @cmp_eq(i8 %a, i8 %b) {

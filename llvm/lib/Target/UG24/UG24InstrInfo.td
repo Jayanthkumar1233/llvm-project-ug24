@@ -536,7 +536,7 @@ def CALL : UG24Inst16<(outs), (ins calltarget:$addr), "#CALL $addr",
 // it that way keeps W and DPTR1 free for arguments, which matters because a
 // call through a pointer usually has both of them already occupied.
 let isCall = 1, isPseudo = 1, isCodeGenOnly = 1,
-    Defs = [RA, PSW, DPTR0, R11], Uses = [SP], Size = 16 in
+    Defs = [RA, PSW, DPTR0, R12], Uses = [SP], Size = 16 in
 def CALLi : UG24Inst16<(outs), (ins GPR16:$target), "#CALLi $target",
                        [(UG24call GPR16:$target)]>;
 

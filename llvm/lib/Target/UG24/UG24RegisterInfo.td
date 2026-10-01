@@ -80,34 +80,39 @@ def SP  : UG24Reg<3, "sp">,  DwarfRegNum<[27]>;
 // Register classes
 //===----------------------------------------------------------------------===//
 
-// Two registers are reserved and never allocated:
+// Both data pointers are reserved, as the confirmed ABI requires:
 //
-//   R11        - scratch byte used by the frame and pseudo expansions, which
-//                need a temporary to hold the high byte of a 16-bit constant
-//                for ADC/SBB.
+//   R13:R12    - DPTR1.  Reserved by the ABI, and with PSW.DP kept clear it is
+//                not the base register the hardware selects, so the backend
+//                uses R12 as the scratch byte that ADC/SBB expansions need to
+//                hold the high half of a 16-bit constant.
 //   R15:R14    - DPTR0, the base address register implicitly used by every
 //                LD and ST.  Dedicating it removes the need to shuffle a
 //                pointer into place around each memory access.
 //
-// R12/R13 (DPTR1) stay allocatable; PSW.DP is kept clear so that DPTR0 is the
-// pointer the hardware selects.
+// Reserving the pair that used to be allocatable buys back R11, which was the
+// scratch byte before and cost the whole P5 pair with it.  All six ordinary
+// pairs are therefore allocatable now, which is more 16-bit registers than the
+// previous arrangement had, not fewer.
+//
+// Allocation order is caller-saved first: R0-R5 are scratch, R6-R11 are
+// preserved, so taking the scratch ones first keeps a leaf function from
+// pushing anything.
 def GPR : RegisterClass<"UG24", [i8], 8, (add
-  R0, R1, R2, R3,       // argument / return / scratch
-  R8, R9,               // W pair
-  R12, R13,             // DPTR1 pair
-  R4, R5, R6, R7, R10,  // callee saved
-  R11,                  // reserved: expansion temporary
-  R14, R15              // reserved: DPTR0
+  R0, R1, R2, R3,               // arguments and return value
+  R4, R5,                       // caller-saved scratch
+  R6, R7, R8, R9, R10, R11,     // callee-saved
+  R12, R13,                     // reserved: DPTR1, and R12 is the scratch byte
+  R14, R15                      // reserved: DPTR0
 )>;
 
-// Every pair that is free to hold a 16-bit value.  P5 is absent because it
-// contains the reserved temporary R11, and DPTR0 is listed but reserved so
-// that the frame code and the assembler can still name it.
+// Every pair that can hold a 16-bit value.  DPTR1 and DPTR0 are listed but
+// reserved, so that the frame code and the assembler can still name them.
 def GPR16 : RegisterClass<"UG24", [i16], 8, (add
-  P0, P1,          // argument / scratch pairs
-  W,               // 16-bit return value
-  DPTR1,           // second 16-bit argument
-  P2, P3,          // callee saved
+  P0, P1,          // argument and return pairs: X0 = R0:R1, X1 = R2:R3
+  P2,              // caller-saved scratch
+  P3, W, P5,       // callee-saved
+  DPTR1,           // reserved: ABI-reserved second data pointer
   DPTR0            // reserved: memory base register
 )> {
   let Size = 16;
