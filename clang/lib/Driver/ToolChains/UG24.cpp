@@ -119,8 +119,16 @@ void ug24::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   AddLinkerInputs(TC, Inputs, Args, CmdArgs, JA);
 
-  if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nodefaultlibs))
-    CmdArgs.push_back("-lug24");
+  if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nodefaultlibs)) {
+    // A part without the optional multiplier and divider needs a runtime built
+    // without them too.  -mcpu=ug24-base keeps MUL and DIV out of the code the
+    // compiler generates, but __mulsi3 and its relatives live in the archive,
+    // and an archive built for the default CPU puts a MUL straight back into
+    // the image -- which is invisible until the part, or a simulator modelling
+    // it, meets an instruction it does not implement.
+    StringRef CPU = Args.getLastArgValue(options::OPT_mcpu_EQ);
+    CmdArgs.push_back(CPU == "ug24-base" ? "-lug24-base" : "-lug24");
+  }
 
   CmdArgs.push_back("-o");
   CmdArgs.push_back(Output.getFilename());

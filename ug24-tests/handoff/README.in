@@ -31,6 +31,39 @@ image on a correct simulator retires exactly the same number, so a count that
 differs by more than a rounding of how you count `WFI` is a real divergence and
 worth chasing even when the output matches.
 
+## If a program runs for ever and prints nothing
+
+Read this first; it is the failure a separately written simulator actually hit.
+
+`UART_STATUS` (`0xFF01`, bit 0 = ready) is **this project's invention**. The uG24
+core contains no UART, so neither source document says a status register exists,
+and a loader that does not model it reads zero. The old runtime waited for that
+bit for ever, so the program spun on the three instructions at the top of its
+transmit loop and printed nothing at all — which looks exactly like a
+miscompiled program and is not one.
+
+**The runtime in this kit settles the handshake once, on the first byte.** If
+nothing answers within a bounded wait, it stops asking and writes the byte
+anyway, so output appears whether or not the register is implemented. You do not
+need to implement `UART_STATUS`, and you do not need to patch anything. If you do
+implement it, return bit 0 set when the transmitter can accept a byte; it then
+costs one read per character.
+
+Signature of the old failure, for the record: `PC` parked on a 3-instruction
+loop, `R0` holding the first character to be sent (`0x48`, `H`), and `DPTR0`
+pointing at `0xFF01`.
+
+## If your core has no multiplier
+
+`no-multiplier/` holds every program again, built with `-mcpu=ug24-base`:
+no `MUL` and no `DIV` anywhere, in the program **or** in the runtime library.
+Use that directory instead if your core does not implement them, and tell us —
+it is a build flag on our side, not something to patch into an image.
+
+The top-level images do use `MUL`, which is in the encoding spreadsheet and is a
+real instruction of the part. A core that implements the full instruction set
+should run them.
+
 ## If you have run an earlier kit: two things changed on 1 October 2026
 
 The hardware team confirmed the ABI and the ELF identity, so **images built

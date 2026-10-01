@@ -21,11 +21,11 @@ typedef unsigned short u16;
 typedef unsigned long u32;
 typedef unsigned long long u64;
 
-// The console comes from the linker script by way of <ug24.h>; see
-// docs/uG24-platform.md for why it is a symbol rather than an address.
-#define UART_TX     UG24_UART_TX
-#define UART_STATUS UG24_UART_STATUS
-#define UART_READY  UG24_UART_READY
+// Every byte leaves through ug24_uart.c, which owns the transmit handshake and
+// what to do when nothing answers it.  See the comment at the top of that file;
+// the short version is that the status register is an assumption and an
+// unbounded wait on it hangs a loader that does not model it.
+void __ug24_uart_put(unsigned char byte);
 
 //===----------------------------------------------------------------------===//
 // Floating-point conversion
@@ -56,9 +56,7 @@ static void sink_put(Sink *sink, char c) {
     if (sink->written + 1 < sink->capacity)
       sink->buffer[sink->written] = c;
   } else {
-    while ((UART_STATUS & UART_READY) == 0)
-      ;
-    UART_TX = (unsigned char)c;
+    __ug24_uart_put((unsigned char)c);
   }
   sink->written++;
 }

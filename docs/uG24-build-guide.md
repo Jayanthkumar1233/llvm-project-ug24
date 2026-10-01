@@ -298,7 +298,31 @@ next to the `.expected` it did not match.
 
 ---
 
-## 7. What the toolchain does not do yet
+## 7. A part without the multiplier
+
+`-mcpu=ug24-base` targets a uG24 whose optional `MUL` and `DIV` blocks are
+absent. It changes two things: the compiler expands those operations into
+shift-and-add loops instead of emitting the instructions, and the driver links
+`libug24-base.a` instead of `libug24.a`, because the multiply helpers in the
+library are themselves compiled and would otherwise put a `MUL` back into the
+image.
+
+```bash
+clang --target=ug24-unknown-elf -mcpu=ug24-base -Os prog.c -o prog.elf
+```
+
+Check that an image really is free of both:
+
+```bash
+build-ug24/bin/llvm-objdump -d --triple=ug24-unknown-elf prog.elf | grep -E '\t(mul|div)\b'
+```
+
+Silence means it is. `ug24-tests/handoff/make-handoff.sh` runs that check over
+everything it builds for the `no-multiplier/` directory.
+
+---
+
+## 8. What the toolchain does not do yet
 
 - **Debug info beyond line tables.** DWARF is emitted and `llvm-dwarfdump`
   reads it, but the backend has had no work on variable locations, so a

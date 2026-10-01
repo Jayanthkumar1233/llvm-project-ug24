@@ -17,16 +17,6 @@ static void show(const char *what, float value) {
     printf("%-9s %08lx\n", what, (unsigned long)(u.bits & 0xffffffffUL));
 }
 
-#ifdef __ug24__
-/* Over the confirmed 32 KB ROM by 136 bytes at -O2 and -O3 with printf's
- * 64-bit formatter linked.  This program prints no 64-bit value, so it opts
- * that formatter out; the float one it genuinely needs stays.  See
- * docs/uG24-assumptions.md. */
-int __ug24_format_u64(char *out, unsigned long long value, unsigned base,
-                      const char *alphabet)
-{ (void)value; (void)base; (void)alphabet; out[0] = '?'; return 1; }
-#endif
-
 int main(void) {
     volatile float a = 3.5f, b = 0.125f, c = -2.0f, zero = 0.0f;
     volatile float big = 16777216.0f;     /* 2^24: the last exact integer */

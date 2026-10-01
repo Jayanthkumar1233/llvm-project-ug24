@@ -24,6 +24,8 @@ mkdir -p "$OUT"
 COMMIT=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILT=$(date -u +%Y-%m-%dT%H:%MZ)
 
+mkdir -p "$OUT/no-multiplier"
+
 for SRC in "$DIR"/src/*.c; do
     NAME=$(basename "$SRC" .c)
     cp "$SRC" "$OUT/$NAME.c"
@@ -34,6 +36,21 @@ for SRC in "$DIR"/src/*.c; do
     # correct simulator retires exactly the same instructions.
     "$SIM" "$OUT/$NAME.elf" 2>/dev/null | grep '^halted' \
         | sed 's/halted after /instructions: /' > "$OUT/$NAME.count"
+
+    # The same programs for a part without the optional multiplier and divider.
+    # -mcpu=ug24-base keeps MUL and DIV out of the generated code and links a
+    # runtime built the same way, so these images contain neither instruction.
+    "$BIN/clang" --target=ug24-unknown-elf -mcpu=ug24-base -Os \
+        "$SRC" -o "$OUT/no-multiplier/$NAME.elf"
+    "$SIM" "$OUT/no-multiplier/$NAME.elf" --quiet \
+        > "$OUT/no-multiplier/$NAME.expected"
+    "$SIM" "$OUT/no-multiplier/$NAME.elf" 2>/dev/null | grep '^halted' \
+        | sed 's/halted after /instructions: /' > "$OUT/no-multiplier/$NAME.count"
+    if "$BIN/llvm-objdump" -d --triple=ug24-unknown-elf \
+            "$OUT/no-multiplier/$NAME.elf" 2>/dev/null |
+            grep -qE '	(mul|div)\b'; then
+        echo "  $NAME: MUL or DIV still present in the no-multiplier build" >&2
+    fi
 done
 
 # Cross-check every expected output against host gcc and glibc, which share no
@@ -85,7 +102,7 @@ cp "$ROOT/docs/uG24-platform.md" "$OUT/"
     done
 } > "$OUT/README.md"
 
-( cd "$OUT" && sha256sum *.elf > SHA256SUMS )
+( cd "$OUT" && sha256sum *.elf no-multiplier/*.elf > SHA256SUMS )
 
 echo "kit in $OUT"
 ls "$OUT"

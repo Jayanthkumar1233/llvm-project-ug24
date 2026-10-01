@@ -26,21 +26,39 @@ trap 'rm -rf "$TMP"' EXIT
 
 mkdir -p "$OUT"
 
+SOURCES="ug24_builtins ug24_int64 ug24_float ug24_printf_float ug24_printf_u64 ug24_u64dec ug24_uart ug24_io ug24_stdio ug24_stdlib"
+
+# Build the C part of the library once per CPU variant.  The second variant
+# exists because -mcpu=ug24-base only keeps MUL and DIV out of the code the
+# compiler generates for the program: __mulsi3 and its relatives are library
+# code, and an archive built for the default CPU would put a MUL back into the
+# image of a program targeting a part that has no multiplier.
+#
 # -ffreestanding -fno-builtin keeps the optimiser from turning the helper
 # loops back into calls to the very helpers being defined.
-for SRC in ug24_builtins ug24_int64 ug24_float ug24_printf_float ug24_printf_u64 ug24_u64dec ug24_io ug24_stdio ug24_stdlib; do
-    # -ffunction-sections/-fdata-sections give each routine its own section, so
-    # a link with --gc-sections can drop the ones a program never calls.
-    # Without them the archive member is the unit of linking and one call to
-    # printf drags in the whole formatter and the 32-bit arithmetic behind it:
-    # 15102 bytes for "Hello ug24", against 234 with them.
-    "$BIN/clang" --target=ug24-unknown-elf -Os -ffreestanding -fno-builtin \
-        -ffunction-sections -fdata-sections \
-        -I "$ROOT/ug24-runtime/include" \
-        -c "$ROOT/ug24-runtime/$SRC.c" -o "$TMP/$SRC.o"
-done
-# setjmp has to be assembly: a C function cannot see the return address the
-# call left in RA, nor the stack pointer its own prologue has already moved.
+build_variant() {                       # $1 = output archive, $2... = extra flags
+    OUTLIB=$1; shift
+    VARTMP="$TMP/$(basename "$OUTLIB" .a)"
+    mkdir -p "$VARTMP"
+    OBJS=""
+    for SRC in $SOURCES; do
+        # -ffunction-sections/-fdata-sections give each routine its own section,
+        # so a link with --gc-sections can drop the ones a program never calls.
+        # Without them the archive member is the unit of linking and one call to
+        # printf drags in the whole formatter and the 32-bit arithmetic behind
+        # it: 15102 bytes for "Hello ug24", against 234 with them.
+        "$BIN/clang" --target=ug24-unknown-elf -Os -ffreestanding -fno-builtin \
+            -ffunction-sections -fdata-sections "$@" \
+            -I "$ROOT/ug24-runtime/include" \
+            -c "$ROOT/ug24-runtime/$SRC.c" -o "$VARTMP/$SRC.o"
+        OBJS="$OBJS $VARTMP/$SRC.o"
+    done
+    # setjmp has to be assembly: a C function cannot see the return address the
+    # call left in RA, nor the stack pointer its own prologue has already moved.
+    # It contains no multiply, so one copy serves both variants.
+    "$BIN/llvm-ar" rcs "$OUT/$OUTLIB" $OBJS "$TMP/ug24_setjmp.o" \
+        "$TMP/ug24_platform.o"
+}
 "$BIN/llvm-mc" -triple=ug24-unknown-elf -filetype=obj \
     "$ROOT/ug24-runtime/ug24_setjmp.s" -o "$TMP/ug24_setjmp.o"
 
@@ -50,11 +68,8 @@ done
 "$BIN/llvm-mc" -triple=ug24-unknown-elf -filetype=obj \
     "$ROOT/ug24-runtime/ug24_platform.s" -o "$TMP/ug24_platform.o"
 
-"$BIN/llvm-ar" rcs "$OUT/libug24.a" "$TMP/ug24_builtins.o" \
-    "$TMP/ug24_int64.o" "$TMP/ug24_float.o" "$TMP/ug24_printf_float.o" \
-    "$TMP/ug24_printf_u64.o" "$TMP/ug24_u64dec.o" "$TMP/ug24_io.o" \
-    "$TMP/ug24_stdio.o" "$TMP/ug24_stdlib.o" "$TMP/ug24_setjmp.o" \
-    "$TMP/ug24_platform.o"
+build_variant libug24.a
+build_variant libug24-base.a -mcpu=ug24-base
 
 "$BIN/llvm-mc" -triple=ug24-unknown-elf -filetype=obj \
     "$ROOT/ug24-runtime/crt0.s" -o "$OUT/crt0.o"

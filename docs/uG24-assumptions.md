@@ -397,10 +397,30 @@ vendor spreadsheet with the runtime and the simulator out of the loop.
 on the part this toolchain was written against, so the `mul` and `div`
 subtarget features default to on; `-mcpu=ug24-base`, or
 `-Xclang -target-feature -Xclang -mul`, describes a part without them, and the
-same operations then become calls to the runtime helpers. Those helpers are
-shift-and-add loops and need no hardware block of their own, so the runtime
-library does not have to be rebuilt to match. `__UG24_HAS_MUL__` and
-`__UG24_HAS_DIV__` are defined when the blocks are present.
+same operations then become calls to the runtime helpers.
+
+**The runtime library has to be rebuilt to match, and this file used to claim
+otherwise.** The helpers are shift-and-add loops that need no hardware block,
+which is why the claim looked right — but `__mulqi3`, `__mulhi3` and `__mulsi3`
+are themselves compiled, and compiled for the default CPU they use `MUL` for
+their inner byte product. A `-mcpu=ug24-base` program that multiplied anything
+therefore still had a `MUL` in its image, from the library rather than from its
+own code, and nothing diagnosed it: the flag did what it said for the program
+and the archive quietly undid it.
+
+`build-runtime.sh` now builds both variants, `libug24.a` and `libug24-base.a`,
+and the Clang driver links the second when `-mcpu=ug24-base` is in effect
+(`clang/lib/Driver/ToolChains/UG24.cpp`). A base-CPU image now contains no `MUL`
+or `DIV` anywhere, which `ug24-tests/handoff/make-handoff.sh` checks by
+disassembling what it builds.
+
+This was found because a separately written simulator that does not implement
+`MUL` reported it — by hand-patching `__mulsi3` in one of our ELF files to call a
+software multiply, which was correct for that call site and is not a thing anyone
+should have to do.
+
+`__UG24_HAS_MUL__` and `__UG24_HAS_DIV__` are defined when the blocks are
+present.
 
 With the feature off, `mul` is not a recognised instruction in assembly
 either — the `AssemblerPredicate` rejects it rather than encoding something
@@ -465,6 +485,24 @@ then replaces `RET` with the `POP PSW` / `POP PC` pair. A handler that calls
 another function saves everything, since it cannot know what the callee
 writes.
 
+### The transmit handshake is self-limiting
+`UART_STATUS` bit 0 is this project's invention along with the rest of the
+peripheral page, so a loader that does not model it reads zero. The runtime used
+to wait for that bit unconditionally, which turned an unimplemented register into
+a program that ran for ever and printed nothing — the worst failure mode
+available, because it is indistinguishable from a miscompiled program. A
+separately written simulator hit exactly this and spent its effort patching our
+ELF files rather than reporting it.
+
+`ug24-runtime/ug24_uart.c` now owns the one place a byte reaches the console and
+settles the question once, on the first byte, while the transmitter is idle and
+the answer is least ambiguous: ready within 4,096 reads means flow control works
+and every later byte waits as long as it takes; never ready means nothing
+implements the register, so stop asking and write the byte. Output then appears
+either way, and hardware that answers on the first read pays nothing. Routing
+both `<stdio.h>` and the `ug24_put*` helpers through one function also took
+about 2 KB out of every image that prints.
+
 ### Controller registers
 The simulator models a small controller in the MMIO page. Like the rest of
 this section it is a placeholder for whatever the SoC actually decodes.
@@ -512,14 +550,15 @@ that goes by section name rather than by `p_paddr` prints garbage from an
 initialised variable and nothing else wrong, which is why the cross-check kit
 has a program for exactly that.
 
-**32 KB of ROM is a real ceiling.** With both printf formatters linked by
-default, the two largest programs in the acceptance suite came within a few
-hundred bytes of it, and at some optimisation levels went over:
-`t13_float` reached 32,904 bytes at `-O2` against a 32,768-byte region. Each now
-opts out of the formatter it does not use — the documented one-line definition —
-which is the choice a real program on a 32 KB part would make. It is also an
-argument for revisiting the default in §3.8: 4.7 KB of float formatter is 15% of
-this ROM, where it was 7% of the old flat 64 KB.
+**32 KB of ROM is a real ceiling, though nothing is against it today.** When the
+split first landed, the two largest programs in the acceptance suite went over
+it at some optimisation levels — `t13_float` reached 32,904 bytes at `-O2`
+against a 32,768-byte region — because both printf formatters are linked by
+default. Consolidating the transmit handshake into one function (§4) gave about
+2 KB back and the worst case is now 30,778 bytes, so the suite builds the default
+configuration at every level with roughly 2 KB spare. Worth watching: 4.7 KB of
+float formatter is 15% of this ROM where it was 7% of the old flat 64 KB, and the
+one-line opt-out below is what a program that never prints a float should use.
 
 ### The peripheral page is not derivable from the source documents
 

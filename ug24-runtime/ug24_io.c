@@ -9,10 +9,10 @@
 
 #include "include/ug24.h"
 
+void __ug24_uart_put(unsigned char byte);
+
 void ug24_putchar(char c) {
-    while ((UG24_UART_STATUS & UG24_UART_READY) == 0)
-        ;
-    UG24_UART_TX = (unsigned char)c;
+    __ug24_uart_put((unsigned char)c);
 }
 
 void ug24_puts(const char *s) {
