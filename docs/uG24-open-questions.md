@@ -36,7 +36,11 @@ not two:
 
 Note on the third: ARM A32 reads PC+8 with 4-byte instructions, Thumb PC+4 with
 2-byte instructions — both are *two instructions ahead*, not one, so "follow ARM"
-on a 2-byte-instruction machine means `current + 4`. Our recommendation, if the
+on a 2-byte-instruction machine means `current + 4`. That row is not a neutral
+alternative: fetch runs two stages ahead of execute in the uG24's 4-stage pipe
+too, so `current + 4` is what a raw fetch pointer yields if the PC read path is
+just the existing register. It is the answer that happens by default, which is
+how ARM got PC+8 without choosing it and then could not change it. Our recommendation, if the
 choice is open, is the address of the `MOV` itself: it is what AArch64 and RISC-V
 chose without legacy to carry, it is the only reading whose meaning survives a
 pipeline redesign, and it is what we already assume.
