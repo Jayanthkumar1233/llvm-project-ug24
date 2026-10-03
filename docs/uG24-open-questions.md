@@ -75,6 +75,13 @@ address — constant 16, which is what we emit. Confirmation still wanted, becau
 this is an inference from notation and because RTL and documents can diverge, but
 the question is no longer open-ended.
 
+A real encoding confirms it independently. `bne 0x009a` at `0x00a8` assembles to
+`06 fe` = `0xFE06`; bits 15:6 give `0x3F8` = -8, and `PC + 1 + i10` in words is
+`84 + 1 - 8 = 77` = byte `0x009A`, the loop head. Had `PC` meant the next
+instruction (word 85) the result would be `0x009C`, one instruction past. This
+fixes the *branch adder's* PC rather than the value read into a register, but the
+spreadsheet spells both with the same `PC`.
+
 Our simulator shares the compiler's assumption, so our own tests cannot catch
 it. `ug24-tests/handoff/src/06_indirect.c` exists for the independently written
 simulator to settle it — a `volatile` function pointer the optimiser cannot
