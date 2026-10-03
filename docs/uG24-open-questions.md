@@ -55,6 +55,26 @@ returns a wrong value and exits reporting success:
 | PC reads the `MOV`'s own address | 42 | 49 | 0 |
 | PC reads the next instruction | 0 | 0 | 0 |
 
+**The spreadsheet probably already answers it, our way.** It gives the link value
+for every linking instruction, and each displacement equals that instruction's
+own length in words:
+
+| Instruction | Length | Spreadsheet |
+| :--- | :--- | :--- |
+| `JR i10` | 1 word | `PC <- PC + 1 + i10` |
+| `LJR i10` | 1 word | `RA <- PC + 1` |
+| `LJA a16` | 2 words | `RA <- PC + 2` |
+| `LJI Xs, i7` | 1 word | `RA <- PC + 1` |
+
+`RA` always lands on the instruction after the current one, which holds only if
+`PC` means *the address of the current instruction*. If `PC` were the next
+instruction, `LJR` would need `RA <- PC` and `LJA` `RA <- PC + 1`; ARM-style
+two-ahead would need `RA <- PC - 1`. Since `MOV Xd, PC` is specified in the same
+table as `Xd <- PC`, the consistent reading gives the current instruction's
+address — constant 16, which is what we emit. Confirmation still wanted, because
+this is an inference from notation and because RTL and documents can diverge, but
+the question is no longer open-ended.
+
 Our simulator shares the compiler's assumption, so our own tests cannot catch
 it. `ug24-tests/handoff/src/06_indirect.c` exists for the independently written
 simulator to settle it — a `volatile` function pointer the optimiser cannot
