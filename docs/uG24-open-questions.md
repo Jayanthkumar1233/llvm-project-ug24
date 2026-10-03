@@ -26,11 +26,24 @@ arguments rather than two.
 | 2 | Where are peripherals decoded, is there a UART, does it have a ready bit? (query G5) | `ug24-runtime/ug24.ld`, and everything downstream reads the symbols |
 
 Question 1 is the sharper of the two: the constant is 16 if `MOV Xd, PC` reads
-its own address and 14 if it reads the next instruction, and the wrong value
-makes every call through a function pointer return into the middle of an
-instruction. Our simulator shares the assumption, so our tests cannot catch it.
-The independently written simulator can: `03_control` in the cross-check kit
-calls through a function-pointer array.
+its own address and 14 if it reads the next instruction. Measured, by patching
+our own simulator to read PC+2, the wrong constant does not crash or hang — it
+returns a wrong value and exits reporting success:
+
+| | `twice(21)` | `square(7)` | Exit |
+| :--- | ---: | ---: | ---: |
+| PC reads the `MOV`'s own address | 42 | 49 | 0 |
+| PC reads the next instruction | 0 | 0 | 0 |
+
+Our simulator shares the compiler's assumption, so our own tests cannot catch
+it. `ug24-tests/handoff/src/06_indirect.c` exists for the independently written
+simulator to settle it — a `volatile` function pointer the optimiser cannot
+devirtualise, so the sequence really is executed.
+
+Note that `03_control` does **not** serve this purpose, despite calling through
+a function-pointer array: at `-Os` the optimiser resolves that array into direct
+calls, and no program in the kit contained the indirect sequence until
+`06_indirect` was added.
 
 ## ROM and RAM
 
