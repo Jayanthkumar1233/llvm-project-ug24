@@ -25,8 +25,23 @@ arguments rather than two.
 | 1 | Which PC does `MOV Xd, PC` read — the `MOV` itself, or the next instruction? | `UG24ExpandPseudo.cpp`, the `SequenceBytes` constant in the indirect-call expansion |
 | 2 | Where are peripherals decoded, is there a UART, does it have a ready bit? (query G5) | `ug24-runtime/ug24.ld`, and everything downstream reads the symbols |
 
-Question 1 is the sharper of the two: the constant is 16 if `MOV Xd, PC` reads
-its own address and 14 if it reads the next instruction. Measured, by patching
+Question 1 is the sharper of the two, and it has **three** plausible answers,
+not two:
+
+| `MOV Xd, PC` yields | Constant |
+| :--- | ---: |
+| the address of the `MOV` itself | **16** — what we emit |
+| the next instruction | 14 |
+| two instructions ahead, as ARM does | 12 |
+
+Note on the third: ARM A32 reads PC+8 with 4-byte instructions, Thumb PC+4 with
+2-byte instructions — both are *two instructions ahead*, not one, so "follow ARM"
+on a 2-byte-instruction machine means `current + 4`. Our recommendation, if the
+choice is open, is the address of the `MOV` itself: it is what AArch64 and RISC-V
+chose without legacy to carry, it is the only reading whose meaning survives a
+pipeline redesign, and it is what we already assume.
+
+Measured, by patching
 our own simulator to read PC+2, the wrong constant does not crash or hang — it
 returns a wrong value and exits reporting success:
 
