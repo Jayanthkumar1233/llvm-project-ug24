@@ -23,6 +23,7 @@ arguments rather than two.
 | # | Question | Lands in |
 | ---: | :--- | :--- |
 | 1 | Which PC does `MOV Xd, PC` read — the `MOV` itself, or the next instruction? | `UG24ExpandPseudo.cpp`, the `SequenceBytes` constant in the indirect-call expansion |
+| 1b | In `JI`/`LJI Xs, i7`, is `{Xs, i7}` a concatenation or an addition? | `UG24InstrInfo.td` patterns, `UG24ExpandPseudo.cpp`, the simulator |
 | 2 | Where are peripherals decoded, is there a UART, does it have a ready bit? (query G5) | `ug24-runtime/ug24.ld`, and everything downstream reads the symbols |
 
 Question 1 is the sharper of the two, and it has **three** plausible answers,
@@ -63,6 +64,19 @@ Note that `03_control` does **not** serve this purpose, despite calling through
 a function-pointer array: at `-Os` the optimiser resolves that array into direct
 calls, and no program in the kit contained the indirect sequence until
 `06_indirect` was added.
+
+**Question 1b may dissolve question 1 entirely.** The spreadsheet gives
+`LJI Xs, i7` as "Link and Jump to register Indirect address", `RA <- PC + 1` and
+`PC <- {Xs, i7}`. The link half is exactly what an indirect call needs — the
+hardware sets the return address. We read `{Xs, i7}` as a concatenation,
+`(Xs & 0xFF80) | i7`, which makes `LJI` useless for a function pointer because
+the low 7 bits of the target must be an assemble-time constant. But the spec
+calls these "Unconditional Indirect jumps upto +/- 256B", and a signed *range* is
+the language of an offset, not a concatenation. If it is `Xs + i7`, then
+`LJI Xs, 0` is a one-instruction call-indirect, the eight-instruction sequence
+goes away, and nothing in the compiler reads PC by hand any more. Neither `JI`
+nor `LJI` is currently selected by the backend, so there is no correctness risk
+today — only eight instructions per indirect call that may be unnecessary.
 
 ## ROM and RAM
 
