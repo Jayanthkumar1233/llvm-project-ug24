@@ -877,9 +877,17 @@ int main(int argc, char **argv) {
         printf("pc=%04x sp=%04x ra=%04x psw=%04x\n", c->pc, c->sp, c->ra, c->psw);
         if (c->irq_taken)
             printf("interrupts taken: %llu\n", (unsigned long long)c->irq_taken);
-        // A byte-sized return lands in R0; anything 16-bit comes back in W.
-        printf("return value: r0=%u  w=%u\n", c->r[0],
-               (unsigned)(c->r[8] | (c->r[9] << 8)));
+        // The confirmed ABI returns a byte in R0, 16 bits in X0 (R1:R0) and
+        // 32 bits in X0:X1 (R3:R2:R1:R0).  This line used to report W, which
+        // was the 16-bit return register under the convention this project
+        // assumed before the hardware team confirmed one -- so it kept
+        // printing a register nothing returns in, and ug24-tests/run-tests.sh
+        // read its failure count from exactly that.
+        printf("return value: r0=%u  x0=%u  x0:x1=%lu\n", c->r[0],
+               (unsigned)(c->r[0] | (c->r[1] << 8)),
+               (unsigned long)((uint32_t)c->r[0] | ((uint32_t)c->r[1] << 8) |
+                               ((uint32_t)c->r[2] << 16) |
+                               ((uint32_t)c->r[3] << 24)));
         for (int i = 0; i < 16; i++)
             printf("r%-2d=%02x%s", i, c->r[i], (i % 8 == 7) ? "\n" : " ");
     }

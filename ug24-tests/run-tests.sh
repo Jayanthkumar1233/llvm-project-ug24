@@ -37,8 +37,11 @@ cd "$TMP"
 OUT=$("$SIM" "$TMP/test.elf" --dump)
 echo "$OUT"
 
-# main returns the number of failed cases in W.
-FAILS=$(echo "$OUT" | sed -n 's/^return value: r0=[0-9]*  *w=\([0-9]*\)$/\1/p')
+# main returns the number of failed cases, so it arrives in X0 -- R1:R0 -- as
+# any 16-bit return does under the confirmed ABI.  This read W until 9 October,
+# which no longer holds a return value: the count always came out 0 and this
+# script could not fail no matter what the test program reported.
+FAILS=$(echo "$OUT" | sed -n 's/^return value: r0=[0-9]*  *x0=\([0-9]*\).*$/\1/p')
 CASES=$("$BIN/llvm-nm" "$TMP/test.elf" | sed -n 's/^0*\([0-9a-f]*\) . ncases$/\1/p')
 RAN=$(xxd -s $((0x$CASES)) -l 1 -p "$TMP/ug24-memory.bin")
 
