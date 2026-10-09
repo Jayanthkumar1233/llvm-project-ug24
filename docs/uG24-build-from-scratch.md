@@ -228,8 +228,8 @@ Present, and irrelevant to the uG24 toolchain:
 
 | Path | What it is |
 | :--- | :--- |
-| `build-arm64/`, `build-armhf/`, `build-none-eabi/`, `build-stage1/` | ARM-era build trees, git-ignored |
-| `build-rt-armhf/`, `build-rt-m4/` | 6,156 files of ARM compiler-rt build output, committed by accident on 17 September 2026 and carrying this machine's absolute paths. Nothing reads them |
+| `build-arm64/`, `build-armhf/`, `build-none-eabi/`, `build-stage1/` | ARM-era build trees, git-ignored by the `/build-*/` pattern |
+| `build-rt-armhf/`, `build-rt-m4/` | ARM compiler-rt build output. 6,156 files of it were committed by accident on 17 September 2026 and untracked again on 9 October; the directories may still exist in a working tree that predates that, but git no longer carries them |
 | `stage1/`, `toolchain-arm64/`, `toolchain-armhf/`, `toolchain-none-eabi/` | installed ARM toolchains |
 | `sysroot-armhf/`, `sysroot-none-eabi/` | ARM sysroots |
 | `arm-tests/` | ARM test files |
